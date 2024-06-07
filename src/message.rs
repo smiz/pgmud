@@ -69,12 +69,12 @@ impl MessageList
 		self.cleanup_old_messages();
 	}
 
-	pub fn post_for_target(&mut self, msg: String, x: i16, y: i16, target: Uuid)
+	pub fn post_for_target(&mut self, msg: String, target: Uuid)
 	{
 		// Insert new message
 		let global_msg = Message {
-			x: x,
-			y: y,
+			x: 0,
+			y: 0,
 			uuid: Some(target),
 			uuid_is_target: true,
 			message: msg,
@@ -83,28 +83,47 @@ impl MessageList
 		self.msg_list.push_back(global_msg);
 		self.cleanup_old_messages();
 	}
+
+	pub fn read_targetted(&mut self, reader: Uuid, after: SystemTime) -> String
+	{
+		let mut result = String::new();
+		// Build the message
+		for element in self.msg_list.iter()
+		{
+			if element.posted_time >= after && element.uuid_is_target && element.uuid.unwrap() == reader
+			{
+				result += &element.message; result += "\n";
+			}
+		}
+		self.cleanup_old_messages();
+		return result;
+	}
+
 	pub fn read(&mut self, x: i16, y: i16, reader: Uuid, after: SystemTime) -> String
 	{
 		let mut result = String::new();
 		// Build the message
 		for element in self.msg_list.iter()
 		{
-			if element.x == x && element.y == y && element.posted_time >= after
+			if element.posted_time >= after
 			{
-				match element.uuid
+				if element.uuid_is_target && element.uuid.unwrap() == reader
 				{
-					Some(uuid) =>
+					result += &element.message; result += "\n";
+				}
+				else if !element.uuid_is_target && element.x == x && element.y == y
+				{
+					match element.uuid
 					{
-						if element.uuid_is_target && uuid == reader
+						Some(uuid) =>
 						{
-							result += &element.message; result += "\n";
-						}
-						else if !element.uuid_is_target && uuid != reader
-						{
-							result += &element.message; result += "\n";
-						}
-					},
-					None => { result += &element.message; result += "\n"; }
+							if uuid != reader
+							{
+								result += &element.message; result += "\n";
+							}
+						},
+						None => { result += &element.message; result += "\n"; }
+					}
 				}
 			}
 		}
@@ -142,7 +161,7 @@ mod messages_unit_test
 		let now = SystemTime::now();
 		let uuid = Uuid::new_v4();
 		let mut msg_list = MessageList::new();
-		msg_list.post_for_target("test!".to_string(),0,0,uuid);
+		msg_list.post_for_target("test!".to_string(),uuid);
 		let mut result = msg_list.read(0,0,uuid,now);
 		print!("{}",result);
 		io::stdout().flush().unwrap();

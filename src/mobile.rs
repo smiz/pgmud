@@ -33,6 +33,22 @@ pub struct Mobile
 
 impl Object for Mobile
 {
+	fn complete_description(&self) -> String
+	{
+		let mut result = self.description().clone();
+		result += "\n";
+		result += &("str: ".to_string()+&(self.strength.to_string()));
+		result += &(", dex: ".to_string()+&(self.dexterity.to_string()));
+		result += &(", con: ".to_string()+&(self.constitution.to_string()));
+		result += &(", int: ".to_string()+&(self.intelligence.to_string()));
+		result += &(", wis: ".to_string()+&(self.wisdom.to_string()));
+		result += &(", chr: ".to_string()+&(self.charisma.to_string()));
+		result += &(", dmg: ".to_string()+&(self.damage.to_string())+&"/".to_string()+&(self.max_hit_points().to_string()));
+		result += "\n";
+		result += &("combat: ".to_string()+&(self.combat.to_string()));
+		return result;
+	}
+
 	fn description(&self) -> String
 	{
 		return self.description.clone();
@@ -65,7 +81,7 @@ impl Mobile
 
 	pub fn max_hit_points(&self) -> i16
 	{
-		return self.wisdom+self.constitution;
+		return self.constitution;
 	}
 
 	pub fn new_character(name: String) -> Box<Mobile>

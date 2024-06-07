@@ -8,5 +8,6 @@ pub trait Object
 	fn description(&self) -> String;
 	fn get_id(&self) -> Uuid;
 	fn get_name(&self) -> String;
+	fn complete_description(&self) -> String;
 }
 

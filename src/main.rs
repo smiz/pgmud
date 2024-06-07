@@ -27,7 +27,7 @@ const TICK : u16 = 250;
 const SUB_TICK : u16 = 50;
 
 // If we are dead, then exit. Otherwise return our position
-fn check_if_dead(uuid: Uuid, world: &mut WorldState, stream: &mut TcpStream) -> bool
+fn check_if_dead(uuid: Uuid, world: &mut WorldState, stream: &mut TcpStream, last_msg_read_time: SystemTime) -> bool
 {
 	if world.mobile_exists(uuid)
 	{
@@ -35,6 +35,10 @@ fn check_if_dead(uuid: Uuid, world: &mut WorldState, stream: &mut TcpStream) -> 
 	}
 	else
 	{
+		let last_msgs = world.message_list.read_targetted(uuid,last_msg_read_time);
+		stream.write_all(b"\n").unwrap();
+		stream.write_all(last_msgs.as_bytes()).unwrap();
+		stream.flush().unwrap();
 		stream.write_all(b"Goodbye!\n").unwrap();
 		stream.flush().unwrap();
 		return true;
@@ -67,6 +71,15 @@ fn look(uuid: Uuid, world: &mut WorldState) -> String
 {
 	let position = world.find_mobile_location(uuid).unwrap();
 	return world.get_location_description(position.0,position.1);
+}
+
+fn show_stats(uuid: Uuid, world: &mut WorldState) -> String
+{
+	let position = world.find_mobile_location(uuid).unwrap();
+	let mobile = world.fetch_mobile(uuid).unwrap();
+	let result = mobile.complete_description();
+	world.add_mobile(mobile,position.0,position.1);
+	return result;
 }
 
 fn load_character(world_obj: Arc<Mutex<WorldState> >) -> Uuid
@@ -132,7 +145,7 @@ fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >)
 			let clean_input_string = input_string.trim();
 			let mut world = world_obj.lock().unwrap();
 			// Got the lock, make sure we are alive before processing a command
-			if check_if_dead(uuid,&mut world,&mut stream) { return; }
+			if check_if_dead(uuid,&mut world,&mut stream,last_msg_read_time) { return; }
 			// We are alive. Process the command.
 			print_prompt = true;
 			let mut tokens = clean_input_string.split_whitespace();
@@ -167,6 +180,12 @@ fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >)
 							None => { stream.write_all(b"Kill what?").unwrap(); }
 						}
 					}
+				"quit" =>
+					{
+						world.fetch_mobile(uuid);
+						return;
+					}
+				"stats" => { stream.write_all(show_stats(uuid,&mut* world).as_bytes()).unwrap(); }
 				_ =>
 					{
 						stream.write_all(b"What?").unwrap();
@@ -185,7 +204,7 @@ fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >)
 							let mut world = world_obj.lock().unwrap();
 							event_q.tick(&mut *world);
 							// After the events, make sure we are alive
-							if check_if_dead(uuid,&mut world,&mut stream) { return; }
+							if check_if_dead(uuid,&mut world,&mut stream,last_msg_read_time) { return; }
 							now = SystemTime::now();
 							break;
 						}
@@ -197,7 +216,7 @@ fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >)
 		{
 			let mut world = world_obj.lock().unwrap();
 			// Got the lock, make sure we are alive
-			if check_if_dead(uuid,&mut world,&mut stream) { return; }
+			if check_if_dead(uuid,&mut world,&mut stream,last_msg_read_time) { return; }
 			let position = world.find_mobile_location(uuid).unwrap();
 			last_msg_read = world.message_list.read(position.0,position.1,uuid,last_msg_read_time);
 			last_msg_read_time = SystemTime::now();

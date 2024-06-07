@@ -88,15 +88,14 @@ impl Event for CombatEvent
 		}
 		if !b_location.is_some()
 		{
-			let a_position = a_location.unwrap();
-			world.message_list.post_for_target("Kill who?".to_string(),a_position.0,a_position.1,self.attacker);
+			world.message_list.post_for_target("Kill who?".to_string(),self.attacker);
 			return;
 		}
 		let a_position = a_location.unwrap();
 		let b_position = b_location.unwrap();
 		if a_position != b_position
 		{
-			world.message_list.post_for_target("Kill who?".to_string(),a_position.0,a_position.1,self.attacker);
+			world.message_list.post_for_target("Kill who?".to_string(),self.attacker);
 			return;
 		}
 		let a = world.fetch_mobile(self.attacker);
@@ -118,6 +117,7 @@ impl Event for CombatEvent
 					if b.damage > b.max_hit_points()
 					{
 						world.message_list.broadcast(a.name.clone()+" slays "+&b.name+"!",a_position.0,a_position.1);	
+						world.message_list.post_for_target("You have been slain by ".to_string()+&a.name+"!",b.id);
 						world.add_mobile(a,a_position.0,a_position.1);
 					}
 					else
@@ -134,6 +134,7 @@ impl Event for CombatEvent
 					if a.damage > a.max_hit_points()
 					{
 						world.message_list.broadcast(b.name.clone()+" slays "+&a.name+"!",a_position.0,a_position.1);	
+						world.message_list.post_for_target("You have been slain by ".to_string()+&b.name+"!",a.id);
 						world.add_mobile(b,b_position.0,b_position.1);
 					}
 					else
@@ -184,7 +185,7 @@ pub struct MoveMobileEvent
 
 impl Event for MoveMobileEvent
 {
-	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
+	fn tick(&self, world: &mut WorldState, _: &mut EventList)
 	{
 		let coordinate = world.find_mobile_location(self.uuid);
 		if !coordinate.is_some()
@@ -209,25 +210,25 @@ impl Event for MoveMobileEvent
 						{
 							world.message_list.post_no_echo(arrive_prefix+" from the south.",xy.0+self.dx,xy.1+self.dy,id);
 							world.message_list.post_no_echo(leave_prefix+" to the north.",xy.0,xy.1,id);
-							world.message_list.post_for_target(location_description,xy.0+self.dx,xy.1+self.dy,id);
+							world.message_list.post_for_target(location_description,id);
 						}
 						(0,-1) =>
 						{
 							world.message_list.post_no_echo(arrive_prefix+" from the north.",xy.0+self.dx,xy.1+self.dy,id);
 							world.message_list.post_no_echo(leave_prefix+" to the south.",xy.0,xy.1,id);
-							world.message_list.post_for_target(location_description,xy.0+self.dx,xy.1+self.dy,id);
+							world.message_list.post_for_target(location_description,id);
 						}
 						(1,0) =>
 						{
 							world.message_list.post_no_echo(arrive_prefix+" from the west.",xy.0+self.dx,xy.1+self.dy,id);
 							world.message_list.post_no_echo(leave_prefix+" to the east.",xy.0,xy.1,id);
-							world.message_list.post_for_target(location_description,xy.0+self.dx,xy.1+self.dy,id);
+							world.message_list.post_for_target(location_description,id);
 						}
 						(-1,0) =>
 						{
 							world.message_list.post_no_echo(arrive_prefix+" from the east.",xy.0+self.dx,xy.1+self.dy,id);
 							world.message_list.post_no_echo(leave_prefix+" to the west.",xy.0,xy.1,id);
-							world.message_list.post_for_target(location_description,xy.0+self.dx,xy.1+self.dy,id);
+							world.message_list.post_for_target(location_description,id);
 						}
 						_ => { return; }
 				}

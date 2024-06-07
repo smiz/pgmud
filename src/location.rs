@@ -24,6 +24,11 @@ pub struct Location
 
 impl Object for Location
 {
+	fn complete_description(&self) -> String
+	{
+		return self.description();
+	}
+
 	fn description(&self) -> String
 	{
 		let mut result = self.description.clone();
@@ -76,9 +81,13 @@ impl Location
 
 	pub fn fetch_mobile_by_name(&mut self, key: String) -> Option<Box<Mobile> >
 	{
+		let mut lower_case_key = key.clone();
+		lower_case_key.make_ascii_lowercase();
 		for (_,mobile) in self.mobiles.iter()
 		{
-			if key == mobile.name
+			let mut mobile_name = mobile.name.clone();
+			mobile_name.make_ascii_lowercase();	
+			if mobile_name.contains(&lower_case_key)
 			{
 				return self.fetch_mobile_by_guid(mobile.id);
 			}
