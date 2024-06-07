@@ -1,5 +1,4 @@
-use crate::map::Map;
-use crate::message::MessageList;
+use crate::world::WorldState;
 use std::collections::LinkedList;
 use crate::map::LocationVisitor;
 use crate::location::Location;
@@ -8,12 +7,11 @@ use crate::mobile::Mobile;
 use crate::object::Object;
 use rand::random;
 use uuid::Uuid;
-use crate::dice::*;
 
 pub trait Event
 {
 	// Execute the event.
-	fn tick(&self, map: &mut Map, event_q: &mut EventList, msg_list: &mut MessageList);
+	fn tick(&self, world: &mut WorldState, event_q: &mut EventList);
 }
 
 pub struct EventList
@@ -47,7 +45,7 @@ impl EventList
 		}
 	}
 
-	pub fn tick(&mut self, map: &mut Map, msg_list: &mut MessageList)
+	pub fn tick(&mut self, world: &mut WorldState)
 	{
 		if self.is_odd
 		{
@@ -55,7 +53,7 @@ impl EventList
 			while !self.odd_event_queue.is_empty()
 			{
 				let event = self.odd_event_queue.pop_front().unwrap();
-				event.tick(map,self,msg_list)
+				event.tick(world,self)
 			}
 		}
 		else
@@ -64,7 +62,7 @@ impl EventList
 			while !self.even_event_queue.is_empty()
 			{
 				let event = self.even_event_queue.pop_front().unwrap();
-				event.tick(map,self,msg_list)
+				event.tick(world,self)
 			}
 		}
 	}
@@ -74,46 +72,60 @@ impl EventList
 pub struct CombatEvent
 {
 	// Combatants
-	pub A: Uuid,
-	pub B: Uuid,
-	// Location
-	pub x: i16,
-	pub y: i16,
+	pub attacker: Uuid,
+	pub defender: Uuid,
 }
 
 impl Event for CombatEvent
 {
-	fn tick(&self, map: &mut Map, _: &mut EventList, msg_list: &mut MessageList)
+	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
 	{
-		let mut location = map.fetch(self.x,self.y);
-		let a = location.fetch_mobile_by_guid(self.A);
-		let b = location.fetch_mobile_by_guid(self.B);
+		let a_location = world.find_mobile_location(self.attacker);
+		let b_location = world.find_mobile_location(self.defender);
+		if !a_location.is_some()
+		{
+			return;
+		}
+		if !b_location.is_some()
+		{
+			let a_position = a_location.unwrap();
+			world.message_list.post_for_target("Kill who?".to_string(),a_position.0,a_position.1,self.attacker);
+			return;
+		}
+		let a_position = a_location.unwrap();
+		let b_position = b_location.unwrap();
+		if a_position != b_position
+		{
+			world.message_list.post_for_target("Kill who?".to_string(),a_position.0,a_position.1,self.attacker);
+			return;
+		}
+		let a = world.fetch_mobile(self.attacker);
+		let b = world.fetch_mobile(self.defender);
 		if a.is_some() && b.is_some()
 		{
 			let mut a = a.unwrap();
 			let mut b = b.unwrap();
-			let a_has_actions = a.actions_used < a.actions_per_tick;
-			let b_has_actions = b.actions_used < b.actions_per_tick;
-			a.actions_used += 1;
-			b.actions_used += 1;
+			let a_has_actions = a.use_action();
+			let b_has_actions = b.use_action();
 			if a_has_actions || b_has_actions
 			{
-				let a_modifier = a.strength+b.dexterity;
-				let b_modifier = b.strength+a.dexterity;
+				let a_modifier = a.strength+a.dexterity;
+				let b_modifier = b.strength+b.dexterity;
 				let outcome = Mobile::contest(a_modifier,b_modifier,&mut a.combat,&mut b.combat);
 				if outcome && a_has_actions
 				{
-					a.damage += a.damage_dice.roll();
+					b.damage += a.damage_dice.roll();
 					if b.damage > b.max_hit_points()
 					{
-						msg_list.broadcast(a.name.clone()+" slays "+&b.name+"!",self.x,self.y);	
-						location.add_mobile(a);
+						world.message_list.broadcast(a.name.clone()+" slays "+&b.name+"!",a_position.0,a_position.1);	
+						world.add_mobile(a,a_position.0,a_position.1);
 					}
 					else
 					{
-						msg_list.broadcast(a.name.clone()+" wounds "+&b.name+"!",self.x,self.y);	
-						location.add_mobile(a);
-						location.add_mobile(b);
+						world.message_list.broadcast(a.name.clone()+" wounds "+&b.name+"!",a_position.0,a_position.1);	
+						world.add_mobile(a,a_position.0,a_position.1);
+						world.add_mobile(b,b_position.0,b_position.1);
+						event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
 					}
 				}
 				else if !outcome && b_has_actions
@@ -121,31 +133,44 @@ impl Event for CombatEvent
 					a.damage += b.damage_dice.roll();
 					if a.damage > a.max_hit_points()
 					{
-						msg_list.broadcast(b.name.clone()+" slays "+&a.name+"!",self.x,self.y);	
-						location.add_mobile(b);
+						world.message_list.broadcast(b.name.clone()+" slays "+&a.name+"!",a_position.0,a_position.1);	
+						world.add_mobile(b,b_position.0,b_position.1);
 					}
 					else
 					{
-						msg_list.broadcast(b.name.clone()+" wounds "+&a.name+"!",self.x,self.y);	
-						location.add_mobile(a);
-						location.add_mobile(b);
+						world.message_list.broadcast(b.name.clone()+" wounds "+&a.name+"!",a_position.0,a_position.1);	
+						world.add_mobile(a,a_position.0,a_position.1);
+						world.add_mobile(b,b_position.0,b_position.1);
+						event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
 					}
 				}
 				else if outcome
 				{
-					msg_list.broadcast(b.name.clone()+" repulses "+&a.name+"!",self.x,self.y);	
-					location.add_mobile(a);
-					location.add_mobile(b);
+					world.message_list.broadcast(b.name.clone()+" repulses "+&a.name+"!",a_position.0,a_position.1);	
+					world.add_mobile(a,a_position.0,a_position.1);
+					world.add_mobile(b,b_position.0,b_position.1);
+					event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
 				}
 				else
 				{
-					msg_list.broadcast(a.name.clone()+" repulses "+&a.name+"!",self.x,self.y);	
-					location.add_mobile(a);
-					location.add_mobile(b);
+					world.message_list.broadcast(a.name.clone()+" repulses "+&b.name+"!",a_position.0,a_position.1);	
+					world.add_mobile(a,a_position.0,a_position.1);
+					world.add_mobile(b,b_position.0,b_position.1);
+					event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
 				}
 			}
+			else
+			{
+				world.add_mobile(a,a_position.0,a_position.1);
+				world.add_mobile(b,b_position.0,b_position.1);
+				event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
+			}
 		}
-		map.replace(location);
+		else
+		{
+			if a.is_some() { world.add_mobile(a.unwrap(),a_position.0,a_position.1); }
+			if b.is_some() { world.add_mobile(b.unwrap(),b_position.0,b_position.1); }
+		}
 	}
 }
 
@@ -153,56 +178,56 @@ impl Event for CombatEvent
 pub struct MoveMobileEvent
 {
 	pub uuid: Uuid,
-	pub x: i16,
-	pub y: i16,
 	pub dx: i16,
 	pub dy: i16
 }
 
 impl Event for MoveMobileEvent
 {
-	fn tick(&self, map: &mut Map, _: &mut EventList, msg_list: &mut MessageList)
+	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
 	{
-		let mut location = map.fetch(self.x,self.y);
-		let mobile = location.fetch_mobile_by_guid(self.uuid);
-		map.replace(location);
+		let coordinate = world.find_mobile_location(self.uuid);
+		if !coordinate.is_some()
+		{
+			return;
+		}
+		let mobile = world.fetch_mobile(self.uuid);
 		match mobile
 		{
 			None => { return; }
 			Some(mobile) => 
 				{
+					let xy = coordinate.unwrap();
 					let id = mobile.get_id();
 					let arrive_prefix = mobile.arrive_prefix.clone();
 					let leave_prefix = mobile.leave_prefix.clone();
-					let mut location = map.fetch(self.x+self.dx,self.y+self.dy);
-					location.add_mobile(mobile);
-					let location_description = location.description();
-					map.replace(location);
+					world.add_mobile(mobile,xy.0+self.dx,xy.1+self.dy);
+					let location_description = world.get_location_description(xy.0+self.dx,xy.1+self.dy);
 					match (self.dx,self.dy)
 					{
 						(0,1) =>
 						{
-							msg_list.post_no_echo(arrive_prefix+" from the south.",self.x+self.dx,self.y+self.dy,id);
-							msg_list.post_no_echo(leave_prefix+" to the north.",self.x,self.y,id);
-							msg_list.post_for_target(location_description,self.x+self.dx,self.y+self.dy,id);
+							world.message_list.post_no_echo(arrive_prefix+" from the south.",xy.0+self.dx,xy.1+self.dy,id);
+							world.message_list.post_no_echo(leave_prefix+" to the north.",xy.0,xy.1,id);
+							world.message_list.post_for_target(location_description,xy.0+self.dx,xy.1+self.dy,id);
 						}
 						(0,-1) =>
 						{
-							msg_list.post_no_echo(arrive_prefix+" from the north.",self.x+self.dx,self.y+self.dy,id);
-							msg_list.post_no_echo(leave_prefix+" to the south.",self.x,self.y,id);
-							msg_list.post_for_target(location_description,self.x+self.dx,self.y+self.dy,id);
+							world.message_list.post_no_echo(arrive_prefix+" from the north.",xy.0+self.dx,xy.1+self.dy,id);
+							world.message_list.post_no_echo(leave_prefix+" to the south.",xy.0,xy.1,id);
+							world.message_list.post_for_target(location_description,xy.0+self.dx,xy.1+self.dy,id);
 						}
 						(1,0) =>
 						{
-							msg_list.post_no_echo(arrive_prefix+" from the west.",self.x+self.dx,self.y+self.dy,id);
-							msg_list.post_no_echo(leave_prefix+" to the east.",self.x,self.y,id);
-							msg_list.post_for_target(location_description,self.x+self.dx,self.y+self.dy,id);
+							world.message_list.post_no_echo(arrive_prefix+" from the west.",xy.0+self.dx,xy.1+self.dy,id);
+							world.message_list.post_no_echo(leave_prefix+" to the east.",xy.0,xy.1,id);
+							world.message_list.post_for_target(location_description,xy.0+self.dx,xy.1+self.dy,id);
 						}
 						(-1,0) =>
 						{
-							msg_list.post_no_echo(arrive_prefix+" from the east.",self.x+self.dx,self.y+self.dy,id);
-							msg_list.post_no_echo(leave_prefix+" to the west.",self.x,self.y,id);
-							msg_list.post_for_target(location_description,self.x+self.dx,self.y+self.dy,id);
+							world.message_list.post_no_echo(arrive_prefix+" from the east.",xy.0+self.dx,xy.1+self.dy,id);
+							world.message_list.post_no_echo(leave_prefix+" to the west.",xy.0,xy.1,id);
+							world.message_list.post_for_target(location_description,xy.0+self.dx,xy.1+self.dy,id);
 						}
 						_ => { return; }
 				}
@@ -220,7 +245,7 @@ pub struct WanderingMonsterLocationVisitor
 
 impl LocationVisitor for WanderingMonsterLocationVisitor
 {
-	fn visit_location(&mut self, location: & Box<Location>)
+	fn visit_location(&mut self, location: &mut Box<Location>)
 	{
 		match location.location_type
 		{
@@ -285,18 +310,16 @@ pub struct WanderingMonsterEvent
 
 impl Event for WanderingMonsterEvent
 {
-	fn tick(&self, map: &mut Map, event_q: &mut EventList, msg_list: &mut MessageList)
+	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
 	{
 		let mut visitor = WanderingMonsterLocationVisitor { monster_list: LinkedList::new() };
-		map.visit_all_locations(&mut visitor);
+		world.visit_all_locations(&mut visitor);
 		for item in visitor.monster_list
 		{
 			let name = item.2.get_name();
 			let msg = "A ".to_owned()+&name+" has arrived.";
-			msg_list.broadcast(msg,item.0,item.1);
-			let mut location = map.fetch(item.0,item.1);
-			location.add_mobile(item.2);
-			map.replace(location);
+			world.message_list.broadcast(msg,item.0,item.1);
+			world.add_mobile(item.2,item.0,item.1);
 		}
 		let next_event = Box::new(WanderingMonsterEvent::new());
 		event_q.insert(next_event);
@@ -310,3 +333,40 @@ impl WanderingMonsterEvent
 		return WanderingMonsterEvent {};
 	}
 }
+
+// Age, rest, etc.
+pub struct AgeLocationVisitor
+{
+}
+
+impl LocationVisitor for AgeLocationVisitor
+{
+	fn visit_location(&mut self, location: &mut Box<Location>)
+	{
+		location.age_all_mobiles();
+	}
+}
+
+pub struct AgeEvent
+{
+}
+
+impl Event for AgeEvent
+{
+	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
+	{
+		let mut visitor = AgeLocationVisitor { };
+		world.visit_all_locations(&mut visitor);
+		let next_event = Box::new(AgeEvent::new());
+		event_q.insert(next_event);
+	}
+}
+
+impl AgeEvent
+{
+	pub fn new() -> AgeEvent
+	{
+		return AgeEvent {};
+	}
+}
+

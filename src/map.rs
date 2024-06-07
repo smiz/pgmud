@@ -1,11 +1,10 @@
 use crate::location::Location;
 use crate::location::LocationTypeCode;
 use std::collections::BTreeMap;
-use uuid::Uuid;
 
 pub trait LocationVisitor
 {
-	fn visit_location(&mut self, location: & Box<Location>);
+	fn visit_location(&mut self, location: &mut Box<Location>);
 }
 
 pub struct Map
@@ -26,16 +25,6 @@ impl Map
 		);
 		map.location_by_position.insert((0,0),start_location);
 		return map;
-	}
-
-	// Find the location that contains a mobile with the given uuid
-	pub fn find_mobile(&mut self, uuid: Uuid) -> Option<(i16,i16)>
-	{
-		for (pos,location) in self.location_by_position.iter()
-		{
-			if location.contains_mobile(&uuid) { return Some(*pos); }
-		}
-		return None;
 	}
 
 	// Fetch the location at x,y. It must be replaced when you
@@ -65,11 +54,11 @@ impl Map
 		);
 	}
 
-	pub fn visit_all_locations(&self, visitor: &mut impl LocationVisitor)
+	pub fn visit_all_locations(&mut self, visitor: &mut impl LocationVisitor)
 	{
-		for (_,location) in self.location_by_position.iter()
+		for (_,mut location) in self.location_by_position.iter_mut()
 		{
-			visitor.visit_location(location);
+			visitor.visit_location(&mut location);
 		}
 	}
 }

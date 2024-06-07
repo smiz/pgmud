@@ -52,6 +52,17 @@ impl Object for Mobile
 impl Mobile
 {
 
+	pub fn use_action(&mut self) -> bool
+	{
+		self.actions_used += 1;
+		return self.actions_used <= self.actions_per_tick;
+	}
+
+	pub fn tick(&mut self)
+	{
+		self.actions_used = 0;
+	}
+
 	pub fn max_hit_points(&self) -> i16
 	{
 		return self.wisdom+self.constitution;

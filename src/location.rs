@@ -61,14 +61,29 @@ impl Location
 		self.mobiles.insert(mobile.get_id(),mobile);
 	}
 
-	pub fn contains_mobile(&self, key: &Uuid) -> bool
-	{
-		return self.mobiles.contains_key(&key);
-	}
-
 	pub fn fetch_mobile_by_guid(&mut self, key: Uuid) -> Option<Box<Mobile> >
 	{
 		return self.mobiles.remove(&key);
+	}
+
+	pub fn age_all_mobiles(&mut self)
+	{
+		for (_,mobile) in self.mobiles.iter_mut()
+		{
+			mobile.tick();
+		}
+	}
+
+	pub fn fetch_mobile_by_name(&mut self, key: String) -> Option<Box<Mobile> >
+	{
+		for (_,mobile) in self.mobiles.iter()
+		{
+			if key == mobile.name
+			{
+				return self.fetch_mobile_by_guid(mobile.id);
+			}
+		}
+		return None;
 	}
 }
 

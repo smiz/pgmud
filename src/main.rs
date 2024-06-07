@@ -7,6 +7,7 @@ use std::{
 };
 use uuid::Uuid;
 
+mod world;
 mod location;
 mod map;
 mod mobile;
@@ -14,10 +15,9 @@ mod object;
 mod events;
 mod message;
 mod dice;
-use crate::map::*;
+use crate::world::*;
 use crate::object::*;
 use crate::events::*;
-use crate::message::*;
 use crate::mobile::*;
 
 // Tick in milliseconds
@@ -26,49 +26,60 @@ const TICK : u16 = 250;
 // messages, getting input, and so forth
 const SUB_TICK : u16 = 50;
 
-struct Position
+// If we are dead, then exit. Otherwise return our position
+fn check_if_dead(uuid: Uuid, world: &mut WorldState, stream: &mut TcpStream) -> bool
 {
-	pub x: i16,
-	pub y: i16,
-	pub uuid: Uuid
+	if world.mobile_exists(uuid)
+	{
+		return false;
+	}
+	else
+	{
+		stream.write_all(b"Goodbye!\n").unwrap();
+		stream.flush().unwrap();
+		return true;
+	}
 }
 
-fn goto(position: Position, dx: i16, dy: i16, event_q: &mut EventList) -> Position
+fn kill(uuid: Uuid, world: &mut WorldState, target: String, event_q: &mut EventList)
 {
-	let new_position = Position { x: position.x+dx, y: position.y+dy, uuid: position.uuid };
+	let position = world.find_mobile_location(uuid).unwrap();
+	let defender = world.get_mobile_id_by_name(position.0,position.1,target);
+	match defender
+	{
+		Some(defender) => { event_q.insert(Box::new(CombatEvent { attacker: uuid, defender: defender })); },
+		_ => { return; }
+	}
+}
+
+fn goto(uuid: Uuid, dx: i16, dy: i16, event_q: &mut EventList)
+{
 	let move_event = Box::new(MoveMobileEvent
 		{
-			uuid: position.uuid,
-			x: position.x,
-			y: position.y,
+			uuid: uuid,
 			dx: dx,
 			dy: dy
 		});
 	event_q.insert(move_event);
-	return new_position;
 }
 
-fn look(position: &Position, map: &mut Map) -> String
+fn look(uuid: Uuid, world: &mut WorldState) -> String
 {
-	let location = map.fetch(position.x,position.y);
-	let description = location.description();
-	map.replace(location);
-	return description;
+	let position = world.find_mobile_location(uuid).unwrap();
+	return world.get_location_description(position.0,position.1);
 }
 
-fn load_character(map_obj: Arc<Mutex<Map> >) -> Position
+fn load_character(world_obj: Arc<Mutex<WorldState> >) -> Uuid
 {
 	let character = Mobile::new_character("Lord Jim".to_string());
-	let position = Position { x: 0, y: 0, uuid: character.get_id() };
-	let mut map = map_obj.lock().unwrap();
-	let mut location = map.fetch(position.x,position.y);
-	location.add_mobile(character);
-	map.replace(location);
-	return position;
+	let uuid = character.get_id();
+	let mut world = world_obj.lock().unwrap();
+	world.add_mobile(character,0,0);
+	return uuid;	
 }
 
 // Get input from the user and dispatch commands
-fn handle_connection(mut stream: TcpStream, map_obj: Arc<Mutex<Map> >, global_msg_obj: Arc<Mutex<MessageList> >)
+fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >)
 {
 	let mut has_input = true;
 	let mut print_prompt = true;
@@ -76,9 +87,8 @@ fn handle_connection(mut stream: TcpStream, map_obj: Arc<Mutex<Map> >, global_ms
 	let mut last_msg_read_time = SystemTime::now();
 	let mut last_msg_read = String::new();
 	let mut event_q = EventList::new();
-	let mut position = load_character(map_obj.clone());
+	let uuid = load_character(world_obj.clone());
 	let mut input: Vec<u8> = vec![];
-	let mut pause_for_tick = true;
 	let _ = stream.set_read_timeout(Some(Duration::from_millis(SUB_TICK.into())));
 	stream.write_all(b"Welcome!").unwrap();
 	loop
@@ -120,39 +130,46 @@ fn handle_connection(mut stream: TcpStream, map_obj: Arc<Mutex<Map> >, global_ms
 		{
 			let input_string = String::from_utf8_lossy(&input);
 			let clean_input_string = input_string.trim();
-			let mut map = map_obj.lock().unwrap();
+			let mut world = world_obj.lock().unwrap();
+			// Got the lock, make sure we are alive before processing a command
+			if check_if_dead(uuid,&mut world,&mut stream) { return; }
+			// We are alive. Process the command.
 			print_prompt = true;
-			match clean_input_string.as_ref()
+			let mut tokens = clean_input_string.split_whitespace();
+			match tokens.next().unwrap().as_ref()
 			{
 				"e" =>
 					{
-						position = goto(position,1,0,&mut event_q);
-						pause_for_tick = true;
+						goto(uuid,1,0,&mut event_q);
 					},
 				"w" =>
 					{
-						position = goto(position,-1,0,&mut event_q);
-						pause_for_tick = true;
+						goto(uuid,-1,0,&mut event_q);
 					},
 				"n" =>
 					{
-						position = goto(position,0,1,&mut event_q);
-						pause_for_tick = true;
+						goto(uuid,0,1,&mut event_q);
 					},
 				"s" =>
 					{
-						position = goto(position,0,-1,&mut event_q);
-						pause_for_tick = true;
+						goto(uuid,0,-1,&mut event_q);
 					},
 				"look" =>
 					{
-						stream.write_all(look(&position,&mut *map).as_bytes()).unwrap();
-						pause_for_tick = false;
+						stream.write_all(look(uuid,&mut *world).as_bytes()).unwrap();
 					},
+				"kill" =>
+					{
+						let target = tokens.next();
+						match target
+						{
+							Some(target) => { kill(uuid,&mut* world,target.to_string(),&mut event_q); },
+							None => { stream.write_all(b"Kill what?").unwrap(); }
+						}
+					}
 				_ =>
 					{
 						stream.write_all(b"What?").unwrap();
-						pause_for_tick = false;
 					}
 			}
 		}
@@ -165,14 +182,11 @@ fn handle_connection(mut stream: TcpStream, map_obj: Arc<Mutex<Map> >, global_ms
 					{
 						if elapsed.as_millis() > TICK.into()
 						{
-							let mut map = map_obj.lock().unwrap();
-							let mut msg_list = global_msg_obj.lock().unwrap();
-							event_q.tick(&mut *map, &mut *msg_list);
+							let mut world = world_obj.lock().unwrap();
+							event_q.tick(&mut *world);
+							// After the events, make sure we are alive
+							if check_if_dead(uuid,&mut world,&mut stream) { return; }
 							now = SystemTime::now();
-							break;
-						}
-						else if !pause_for_tick
-						{
 							break;
 						}
 					} 
@@ -181,8 +195,11 @@ fn handle_connection(mut stream: TcpStream, map_obj: Arc<Mutex<Map> >, global_ms
 		}
 		// Display any messages in the global message list
 		{
-			let mut msg_list = global_msg_obj.lock().unwrap();
-			last_msg_read = msg_list.read(position.x,position.y,position.uuid,last_msg_read_time);
+			let mut world = world_obj.lock().unwrap();
+			// Got the lock, make sure we are alive
+			if check_if_dead(uuid,&mut world,&mut stream) { return; }
+			let position = world.find_mobile_location(uuid).unwrap();
+			last_msg_read = world.message_list.read(position.0,position.1,uuid,last_msg_read_time);
 			last_msg_read_time = SystemTime::now();
 		}
 		if !last_msg_read.is_empty()
@@ -196,36 +213,35 @@ fn handle_connection(mut stream: TcpStream, map_obj: Arc<Mutex<Map> >, global_ms
 }
 
 // Automatic events that run in the background
-fn background_events(map_obj: Arc<Mutex<Map> >, global_msg_obj: Arc<Mutex<MessageList> >)
+fn background_events(world_obj: Arc<Mutex<WorldState> >)
 {
 	let tick_duration = Duration::from_millis(TICK.into());
 	let mut event_q = EventList::new();
 	// Default events
 	let wandering_monsters = Box::new(WanderingMonsterEvent::new());
 	event_q.insert(wandering_monsters);
+	let age_event = Box::new(AgeEvent::new());
+	event_q.insert(age_event);
 	// Run the event loop
 	loop
 	{
 		thread::sleep(tick_duration);
 		{
-			let mut map = map_obj.lock().unwrap();
-			let mut msg_list = global_msg_obj.lock().unwrap();
-			event_q.tick(&mut *map, &mut *msg_list);
+			let mut world = world_obj.lock().unwrap();
+			event_q.tick(&mut *world);
 		}
 	}
 }
 
 fn main()
 {
-	let global_msg_obj = Arc::new(Mutex::new(MessageList::new()));
-	let map_obj = Arc::new(Mutex::new(Map::new()));
+	let world_obj = Arc::new(Mutex::new(WorldState::new()));
 	// Start the background thread
 	{
-		let map_obj = Arc::clone(&map_obj);
-		let global_msg_obj = Arc::clone(&global_msg_obj);
+		let world_obj = Arc::clone(&world_obj);
 		thread::spawn(move ||
 			{
-				background_events(map_obj,global_msg_obj);
+				background_events(world_obj);
 			}
 		);
 	}
@@ -234,11 +250,10 @@ fn main()
 	for stream in listener.incoming()
 	{
 		let stream = stream.unwrap();
-		let map_obj = Arc::clone(&map_obj);
-		let global_msg_obj = Arc::clone(&global_msg_obj);
+		let world_obj = Arc::clone(&world_obj);
 		thread::spawn(move ||
 			{
-				handle_connection(stream,map_obj,global_msg_obj);
+				handle_connection(stream,world_obj);
 			}
 		);
 	}
