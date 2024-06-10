@@ -108,16 +108,14 @@ impl Event for CombatEvent
 			let b_has_actions = b.use_action();
 			if a_has_actions || b_has_actions
 			{
-				let a_modifier = a.strength+a.dexterity;
-				let b_modifier = b.strength+b.dexterity;
-				let outcome = Mobile::contest(a_modifier,b_modifier,&mut a.combat,&mut b.combat);
+				let outcome = a.roll_combat() >= b.roll_combat();
 				if outcome && a_has_actions
 				{
 					b.damage += a.damage_dice.roll();
 					if b.damage > b.max_hit_points()
 					{
 						world.message_list.broadcast(a.name.clone()+" slays "+&b.name+"!",a_position.0,a_position.1);	
-						world.message_list.post_for_target("You have been slain by ".to_string()+&a.name+"!",b.id);
+						world.message_list.post_for_target("You have been slain by ".to_string()+&a.name+"!",b.get_id());
 						world.add_mobile(a,a_position.0,a_position.1);
 					}
 					else
@@ -134,7 +132,7 @@ impl Event for CombatEvent
 					if a.damage > a.max_hit_points()
 					{
 						world.message_list.broadcast(b.name.clone()+" slays "+&a.name+"!",a_position.0,a_position.1);	
-						world.message_list.post_for_target("You have been slain by ".to_string()+&b.name+"!",a.id);
+						world.message_list.post_for_target("You have been slain by ".to_string()+&b.name+"!",a.get_id());
 						world.add_mobile(b,b_position.0,b_position.1);
 					}
 					else
@@ -284,7 +282,7 @@ impl WanderingMonsterLocationVisitor
 			2 => { return Some(Mobile::rodent()); },
 			3 => { return Some(Mobile::rodent()); },
 			4 => { return Some(Mobile::rodent()); },
-			5 => { return Some(Mobile::rodent()); },
+			5 => { return Some(Mobile::rabbit()); },
 			_ => { return None; }
 		}
 	}

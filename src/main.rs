@@ -7,6 +7,7 @@ use std::{
 };
 use uuid::Uuid;
 
+mod items;
 mod world;
 mod location;
 mod map;

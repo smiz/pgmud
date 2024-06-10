@@ -2,6 +2,7 @@
 use crate::object::Object;
 use crate::mobile::Mobile;
 use std::collections::BTreeMap;
+use crate::items::*;
 use uuid::Uuid;
 
 #[derive(Copy,Clone)]
@@ -19,7 +20,7 @@ pub struct Location
 	description: String,
 	pub location_type: LocationTypeCode,
 	mobiles: BTreeMap<Uuid,Box<Mobile> >,
-	id: Uuid
+	items: Vec<Box<Item> >
 }
 
 impl Object for Location
@@ -38,10 +39,15 @@ impl Object for Location
 			result += "\n";
 			result += &description;
 		}
+		for item in self.items.iter()
+		{
+			let description = item.description();
+			result += "\n";
+			result += &description;
+		}
 		return result;
 	}
 
-	fn get_id(&self) -> Uuid { return self.id; }
 	fn get_name(&self) -> String { return self.description.clone(); }
 }
 
@@ -50,15 +56,24 @@ impl Location
 	pub fn new(x: i16, y: i16, code: LocationTypeCode,
 		description: String) -> Location
 	{
-		return Location
+		let mut result = Location
 		{
 			x: x,
 			y: y,
 			description: description.clone(),
 			location_type: code.clone(),
 			mobiles: BTreeMap::new(),
-			id: Uuid::new_v4(),
+			items: Vec::new()
 		};
+		match result.location_type
+		{
+			LocationTypeCode::Forest =>
+				{
+					result.items.push(Item::forest_debris());
+					return result;
+				},
+			_ => { return result; }
+		}
 	}
 
 	pub fn add_mobile(&mut self, mobile: Box<Mobile>)
@@ -89,7 +104,7 @@ impl Location
 			mobile_name.make_ascii_lowercase();	
 			if mobile_name.contains(&lower_case_key)
 			{
-				return self.fetch_mobile_by_guid(mobile.id);
+				return self.fetch_mobile_by_guid(mobile.get_id());
 			}
 		}
 		return None;

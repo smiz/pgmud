@@ -62,7 +62,7 @@ impl WorldState
 		{
 			Some(mobile) =>
 				{ 
-					let uuid = mobile.id;
+					let uuid = mobile.get_id();
 					location.add_mobile(mobile);
 					self.map.replace(location);
 					return Some(uuid);
@@ -85,7 +85,7 @@ impl WorldState
 	pub fn add_mobile(&mut self, mobile: Box<Mobile>, x: i16, y: i16)
 	{
 		let mut location = self.map.fetch(x,y);
-		self.mobile_uuid_to_location.insert(mobile.id,(x,y));
+		self.mobile_uuid_to_location.insert(mobile.get_id(),(x,y));
 		location.add_mobile(mobile);
 		self.map.replace(location);
 	}
