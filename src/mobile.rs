@@ -30,9 +30,12 @@ pub struct Mobile
 	pub actions_used: i16,
 	// Skills
 	pub combat: i16,
+	// Description of the object we are using as a weapon
+	pub wielded: String,
+	// Damage done by our attack
 	pub damage_dice: Dice,
 	// Inventory
-	pub inventory: Vec<Box<Item > >
+	inventory: Vec<Box<Item > >
 }
 
 impl Object for Mobile
@@ -64,11 +67,12 @@ impl Object for Mobile
 	{
 		return self.name.clone();
 	}
+
 }
 
 impl Mobile
 {
-	fn list_inventory(&self) -> String
+	pub fn list_inventory(&self) -> String
 	{
 		let mut result = String::new();
 		for item in self.inventory.iter()
@@ -136,6 +140,55 @@ impl Mobile
 		return self.constitution;
 	}
 
+	pub fn fetch_last_item(&mut self) -> Option<Box<Item> >
+	{
+		let item_ptr = self.inventory.pop();
+		match item_ptr
+		{
+			Some(ref item) => { item.drop_item(self); return item_ptr; }
+			_ => { return None; }
+		}
+	}
+
+	pub fn fetch_item_by_position(&mut self, pos: usize) -> Option<Box<Item> >
+	{
+		if pos >= self.inventory.len()
+		{
+			return None;
+		}
+		let item = self.inventory.remove(pos);
+		item.drop_item(self);
+		return Some(item);
+	}
+
+	pub fn fetch_item_by_name(&mut self, key: String) -> Option<Box<Item> >
+	{
+		let mut i = 0;
+		let mut lower_case_key = key.clone();
+		lower_case_key.make_ascii_lowercase();
+		while i < self.inventory.len()
+		{
+			let mut name = self.inventory[i].name.clone();
+			name.make_ascii_lowercase();
+    		if name.contains(&key)
+			{
+				return self.fetch_item_by_position(i);
+			}
+			i += 1;
+		}
+		return None;
+	}
+
+	pub fn unwield(&mut self)
+	{
+	}
+
+	pub fn add_item(&mut self, mut item: Box<Item>)
+	{
+		item.got_item(self);
+		self.inventory.push(item);
+	}
+
 	pub fn new_character(name: String) -> Box<Mobile>
 	{
 		let die = Dice { number: 3, die: 6 };
@@ -159,6 +212,7 @@ impl Mobile
 				damage: 0,	
 				actions_per_tick: 1,
 				actions_used: 0,
+				wielded: "fist".to_string(),
 				damage_dice: Dice { number: 1, die: 2 },
 				inventory: Vec::new()
 			});
@@ -185,6 +239,7 @@ impl Mobile
 				damage: 0,
 				actions_per_tick: 1,
 				actions_used: 0,
+				wielded: "bite".to_string(),
 				damage_dice: Dice { number: 1, die: 1 },
 				inventory: Vec::new()
 			});
@@ -210,6 +265,7 @@ impl Mobile
 				damage: 0,
 				actions_per_tick: 1,
 				actions_used: 0,
+				wielded: "bite".to_string(),
 				damage_dice: Dice { number: 1, die: 1 },
 				inventory: vec![ Item::rabbit_foot() ]
 			});
@@ -236,6 +292,7 @@ impl Mobile
 				xp: 0,
 				actions_per_tick: 1,
 				actions_used: 0,
+				wielded: "fist".to_string(),
 				damage_dice: Dice { number: 1, die: 2 },
 				inventory: Vec::new()
 			});

@@ -20,6 +20,7 @@ use crate::world::*;
 use crate::object::*;
 use crate::events::*;
 use crate::mobile::*;
+use crate::items::*;
 
 // Tick in milliseconds
 const TICK : u16 = 250;
@@ -44,6 +45,42 @@ fn check_if_dead(uuid: Uuid, world: &mut WorldState, stream: &mut TcpStream, las
 		stream.flush().unwrap();
 		return true;
 	}
+}
+
+fn get_item(uuid: Uuid, world: &mut WorldState, target: String) -> String
+{
+	let mut result = "Got it!".to_string();
+	let position = world.find_mobile_location(uuid).unwrap();
+	let mut mobile = world.fetch_mobile(uuid).unwrap();
+	let item = world.fetch_item_by_name(position.0,position.1,&target);
+	if item.is_some()
+	{
+		mobile.add_item(item.unwrap());
+	}
+	else
+	{
+		result = "Get what?".to_string();
+	}
+	world.add_mobile(mobile,position.0,position.1);
+	return result;
+}
+
+fn drop_item(uuid: Uuid, world: &mut WorldState, target: String) -> String
+{
+	let mut result = "Dropped it!".to_string();
+	let position = world.find_mobile_location(uuid).unwrap();
+	let mut mobile = world.fetch_mobile(uuid).unwrap();
+	let item = mobile.fetch_item_by_name(target);
+	if item.is_some()
+	{
+		world.add_item(position.0,position.1,item.unwrap());
+	}
+	else
+	{
+		result = "Drop what?".to_string();
+	}
+	world.add_mobile(mobile,position.0,position.1);
+	return result;
 }
 
 fn kill(uuid: Uuid, world: &mut WorldState, target: String, event_q: &mut EventList)
@@ -72,6 +109,15 @@ fn look(uuid: Uuid, world: &mut WorldState) -> String
 {
 	let position = world.find_mobile_location(uuid).unwrap();
 	return world.get_location_description(position.0,position.1);
+}
+
+fn show_inventory(uuid: Uuid, world: &mut WorldState) -> String
+{
+	let position = world.find_mobile_location(uuid).unwrap();
+	let mobile = world.fetch_mobile(uuid).unwrap();
+	let inventory = mobile.list_inventory();
+	world.add_mobile(mobile,position.0,position.1);
+	return ("You have:\n".to_owned()+&inventory).to_string();
 }
 
 fn show_stats(uuid: Uuid, world: &mut WorldState) -> String
@@ -181,12 +227,31 @@ fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >)
 							None => { stream.write_all(b"Kill what?").unwrap(); }
 						}
 					}
+				"get" =>
+					{
+						let target = tokens.next();
+						match target
+						{
+							Some(target) => { stream.write_all(get_item(uuid,&mut* world,target.to_string()).as_bytes()).unwrap(); },
+							None => { stream.write_all(b"Get what?").unwrap(); }
+						}
+					}
+				"drop" =>
+					{
+						let target = tokens.next();
+						match target
+						{
+							Some(target) => { stream.write_all(drop_item(uuid,&mut* world,target.to_string()).as_bytes()).unwrap(); },
+							None => { stream.write_all(b"Drop what?").unwrap(); }
+						}
+					}
 				"quit" =>
 					{
 						world.fetch_mobile(uuid);
 						return;
 					}
 				"stats" => { stream.write_all(show_stats(uuid,&mut* world).as_bytes()).unwrap(); }
+				"i" => { stream.write_all(show_inventory(uuid,&mut* world).as_bytes()).unwrap(); }
 				_ =>
 					{
 						stream.write_all(b"What?").unwrap();

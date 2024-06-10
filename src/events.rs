@@ -5,6 +5,7 @@ use crate::location::Location;
 use crate::location::LocationTypeCode;
 use crate::mobile::Mobile;
 use crate::object::Object;
+use crate::message::*;
 use rand::random;
 use uuid::Uuid;
 
@@ -117,10 +118,11 @@ impl Event for CombatEvent
 						world.message_list.broadcast(a.name.clone()+" slays "+&b.name+"!",a_position.0,a_position.1);	
 						world.message_list.post_for_target("You have been slain by ".to_string()+&a.name+"!",b.get_id());
 						world.add_mobile(a,a_position.0,a_position.1);
+						world.add_corpse(&mut b,b_position.0,b_position.1);
 					}
 					else
 					{
-						world.message_list.broadcast(a.name.clone()+" wounds "+&b.name+"!",a_position.0,a_position.1);	
+						world.message_list.broadcast(a.name.clone()+" wounds "+&b.name+" with a "+&a.wielded+"!",a_position.0,a_position.1);	
 						world.add_mobile(a,a_position.0,a_position.1);
 						world.add_mobile(b,b_position.0,b_position.1);
 						event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
@@ -134,10 +136,11 @@ impl Event for CombatEvent
 						world.message_list.broadcast(b.name.clone()+" slays "+&a.name+"!",a_position.0,a_position.1);	
 						world.message_list.post_for_target("You have been slain by ".to_string()+&b.name+"!",a.get_id());
 						world.add_mobile(b,b_position.0,b_position.1);
+						world.add_corpse(&mut a,a_position.0,a_position.1);
 					}
 					else
 					{
-						world.message_list.broadcast(b.name.clone()+" wounds "+&a.name+"!",a_position.0,a_position.1);	
+						world.message_list.broadcast(b.name.clone()+" wounds "+&a.name+" with a "+&b.wielded+"!",a_position.0,a_position.1);	
 						world.add_mobile(a,a_position.0,a_position.1);
 						world.add_mobile(b,b_position.0,b_position.1);
 						event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
@@ -244,7 +247,7 @@ pub struct WanderingMonsterLocationVisitor
 
 impl LocationVisitor for WanderingMonsterLocationVisitor
 {
-	fn visit_location(&mut self, location: &mut Box<Location>)
+	fn visit_location(&mut self, location: &mut Box<Location>, messages: &mut MessageList)
 	{
 		match location.location_type
 		{
@@ -340,9 +343,10 @@ pub struct AgeLocationVisitor
 
 impl LocationVisitor for AgeLocationVisitor
 {
-	fn visit_location(&mut self, location: &mut Box<Location>)
+	fn visit_location(&mut self, location: &mut Box<Location>, messages: &mut MessageList)
 	{
 		location.age_all_mobiles();
+		location.age_all_items(messages);
 	}
 }
 

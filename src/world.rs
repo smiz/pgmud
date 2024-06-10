@@ -2,6 +2,7 @@ use crate::message::MessageList;
 use crate::map::*;
 use crate::mobile::*;
 use crate::object::*;
+use crate::items::*;
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
@@ -74,12 +75,34 @@ impl WorldState
 		}
 	}
 
+	pub fn add_item(&mut self, x: i16, y: i16, item: Box<Item>)
+	{
+		let mut location = self.map.fetch(x,y);
+		location.add_item(item);
+		self.map.replace(location);
+	}
+
+	pub fn fetch_item_by_name(&mut self, x: i16, y: i16, key: &String) -> Option<Box<Item> >
+	{
+		let mut location = self.map.fetch(x,y);
+		let item = location.fetch_item_by_name(key);
+		self.map.replace(location);
+		return item;	
+	}
+
 	pub fn get_location_description(&mut self, x: i16, y: i16) -> String
 	{
 		let location = self.map.fetch(x,y);
 		let result = location.description();
 		self.map.replace(location);
 		return result;
+	}
+
+	pub fn add_corpse(&mut self, mobile: &mut Box<Mobile>, x: i16, y: i16)
+	{
+		let mut location = self.map.fetch(x,y);
+		location.add_corpse(mobile);
+		self.map.replace(location);
 	}
 
 	pub fn add_mobile(&mut self, mobile: Box<Mobile>, x: i16, y: i16)
@@ -92,7 +115,7 @@ impl WorldState
 
 	pub fn visit_all_locations(&mut self, visitor: &mut impl LocationVisitor)
 	{
-		self.map.visit_all_locations(visitor);
+		self.map.visit_all_locations(visitor,&mut self.message_list);
 	}
 }
 

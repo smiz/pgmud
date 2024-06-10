@@ -1,10 +1,11 @@
 use crate::location::Location;
 use crate::location::LocationTypeCode;
 use std::collections::BTreeMap;
+use crate::message::*;
 
 pub trait LocationVisitor
 {
-	fn visit_location(&mut self, location: &mut Box<Location>);
+	fn visit_location(&mut self, location: &mut Box<Location>, messages: &mut MessageList);
 }
 
 pub struct Map
@@ -54,11 +55,11 @@ impl Map
 		);
 	}
 
-	pub fn visit_all_locations(&mut self, visitor: &mut impl LocationVisitor)
+	pub fn visit_all_locations(&mut self, visitor: &mut impl LocationVisitor, messages: &mut MessageList)
 	{
 		for (_,mut location) in self.location_by_position.iter_mut()
 		{
-			visitor.visit_location(&mut location);
+			visitor.visit_location(&mut location,messages);
 		}
 	}
 }

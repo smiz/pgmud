@@ -54,6 +54,21 @@ impl MessageList
 		} 
 	}
 
+	pub fn post_for_all(&mut self, msg: String, x: i16, y: i16)
+	{
+		// Insert new message
+		let global_msg = Message {
+			x: x,
+			y: y,
+			uuid: None,
+			uuid_is_target: false,
+			message: msg,
+			posted_time: SystemTime::now()
+		};
+		self.msg_list.push_back(global_msg);
+		self.cleanup_old_messages();
+	}
+
 	pub fn post_no_echo(&mut self, msg: String, x: i16, y: i16, origin: Uuid)
 	{
 		// Insert new message

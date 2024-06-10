@@ -3,6 +3,7 @@ use crate::object::Object;
 use crate::mobile::Mobile;
 use std::collections::BTreeMap;
 use crate::items::*;
+use crate::message::*;
 use uuid::Uuid;
 
 #[derive(Copy,Clone)]
@@ -76,6 +77,28 @@ impl Location
 		}
 	}
 
+	pub fn add_item(&mut self, item: Box<Item>)
+	{
+		self.items.push(item);
+	}
+
+	pub fn add_corpse(&mut self, mobile: &mut Box<Mobile>)
+	{
+		self.add_item(Item::corpse(mobile.name.clone()));
+		loop
+		{
+			let item = mobile.fetch_last_item();
+			if item.is_some()
+			{
+				self.add_item(item.unwrap());
+			}
+			else
+			{
+				return;
+			}
+		}
+	}
+
 	pub fn add_mobile(&mut self, mobile: Box<Mobile>)
 	{
 		self.mobiles.insert(mobile.get_id(),mobile);
@@ -84,6 +107,24 @@ impl Location
 	pub fn fetch_mobile_by_guid(&mut self, key: Uuid) -> Option<Box<Mobile> >
 	{
 		return self.mobiles.remove(&key);
+	}
+
+	pub fn age_all_items(&mut self, messages: &mut MessageList)
+	{
+		let mut i = 0;
+		while i < self.items.len()
+		{
+			self.items[i].tick();
+    		if self.items[i].lifetime == 0
+			{
+				messages.post_for_all(self.items[i].name.clone()+" decays into dust",self.x,self.y);
+				self.items.remove(i);
+			}
+			else
+			{
+				i += 1;
+			}
+		}
 	}
 
 	pub fn age_all_mobiles(&mut self)
@@ -109,10 +150,61 @@ impl Location
 		}
 		return None;
 	}
+
+	pub fn fetch_item_by_position(&mut self, pos: usize) -> Option<Box<Item> >
+	{
+		if pos < self.items.len()
+		{
+			return Some(self.items.remove(pos));
+		}
+		return None;
+	}
+
+	pub fn fetch_item_by_name(&mut self, key: &String) -> Option<Box<Item> >
+	{
+		let mut i = 0;
+		let mut lower_case_key = key.clone();
+		lower_case_key.make_ascii_lowercase();
+		while i < self.items.len()
+		{
+			let mut name = self.items[i].name.clone();
+			name.make_ascii_lowercase();
+    		if name.contains(&lower_case_key)
+			{
+				return Some(self.items.remove(i));
+			}
+			i += 1;
+		}
+		return None;
+	}
 }
 
 #[cfg(test)]
 mod location_unit_test
 {
 	use super::*;
+	use crate::items::*;
+	use crate::mobile::*;
+
+	#[test]
+	fn add_and_fetch_test()
+	{
+		let mut location = Location::new(0,0,LocationTypeCode::Forest,"Forest".to_string());
+		let foot = Item::rabbit_foot();
+		location.add_item(foot);
+		let found_item = location.fetch_item_by_name(&"foot".to_string());
+		assert!(found_item.is_some());
+		let found_again = location.fetch_item_by_name(&"foot".to_string());
+		assert!(found_again.is_none());
+	}
+
+	#[test]
+	fn add_corpse()
+	{
+		let mut location = Location::new(0,0,LocationTypeCode::Forest,"Forest".to_string());
+		let mut rabbit = Mobile::rabbit();
+		location.add_corpse(&mut rabbit);
+		let found_item = location.fetch_item_by_name(&"foot".to_string());
+		assert!(found_item.is_some());
+	}
 }

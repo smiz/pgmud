@@ -1,5 +1,3 @@
-// Generate unique identifiers
-use uuid::Uuid;
 
 // Interface for all types of objects
 pub trait Object
