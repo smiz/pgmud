@@ -151,15 +151,6 @@ impl Location
 		return None;
 	}
 
-	pub fn fetch_item_by_position(&mut self, pos: usize) -> Option<Box<Item> >
-	{
-		if pos < self.items.len()
-		{
-			return Some(self.items.remove(pos));
-		}
-		return None;
-	}
-
 	pub fn fetch_item_by_name(&mut self, key: &String) -> Option<Box<Item> >
 	{
 		let mut i = 0;

@@ -20,7 +20,6 @@ use crate::world::*;
 use crate::object::*;
 use crate::events::*;
 use crate::mobile::*;
-use crate::items::*;
 
 // Tick in milliseconds
 const TICK : u16 = 250;
@@ -55,7 +54,16 @@ fn get_item(uuid: Uuid, world: &mut WorldState, target: String) -> String
 	let item = world.fetch_item_by_name(position.0,position.1,&target);
 	if item.is_some()
 	{
-		mobile.add_item(item.unwrap());
+		let item = item.unwrap();
+		if mobile.has_room_for_item(&item)
+		{
+			mobile.add_item(item);
+		}
+		else
+		{
+			result = "You don't have space for that!".to_string();
+			world.add_item(position.0,position.1,item);
+		}
 	}
 	else
 	{
@@ -63,6 +71,32 @@ fn get_item(uuid: Uuid, world: &mut WorldState, target: String) -> String
 	}
 	world.add_mobile(mobile,position.0,position.1);
 	return result;
+}
+
+fn practice(uuid: Uuid, world: &mut WorldState, skill: String) -> String
+{
+	let mut found_skill = true;
+	let mut success = false;
+	let position = world.find_mobile_location(uuid).unwrap();
+	let mut mobile = world.fetch_mobile(uuid).unwrap();
+	if skill == "combat"
+	{
+		success = mobile.practice_combat();
+	}
+	else
+	{
+		found_skill = false; 
+	}
+	world.add_mobile(mobile,position.0,position.1);
+	if !found_skill
+	{
+		return "Practice what?".to_string();
+	}
+	else if !success
+	{
+		return "Not enough xp!".to_string();
+	}
+	return "You have improved at ".to_string()+&skill+"!";
 }
 
 fn drop_item(uuid: Uuid, world: &mut WorldState, target: String) -> String
@@ -242,6 +276,15 @@ fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >)
 						match target
 						{
 							Some(target) => { stream.write_all(drop_item(uuid,&mut* world,target.to_string()).as_bytes()).unwrap(); },
+							None => { stream.write_all(b"Drop what?").unwrap(); }
+						}
+					}
+				"prac" =>
+					{
+						let target = tokens.next();
+						match target
+						{
+							Some(target) => { stream.write_all(practice(uuid,&mut* world,target.to_string()).as_bytes()).unwrap(); },
 							None => { stream.write_all(b"Drop what?").unwrap(); }
 						}
 					}

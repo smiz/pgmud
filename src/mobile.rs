@@ -1,5 +1,5 @@
 use crate::object::Object;
-use crate::items::Item;
+use crate::items::*;
 use uuid::Uuid;
 use crate::dice::*;
 
@@ -35,7 +35,10 @@ pub struct Mobile
 	// Damage done by our attack
 	pub damage_dice: Dice,
 	// Inventory
-	inventory: Vec<Box<Item > >
+	inventory: Vec<Box<Item > >,
+	// Maximum miscellaneous that can be carried
+	pub misc_items_slots: u8,
+	pub weapon_slots: u8
 }
 
 impl Object for Mobile
@@ -72,6 +75,34 @@ impl Object for Mobile
 
 impl Mobile
 {
+
+	fn xp_cost(&self, skill_level: i16) -> i16
+	{
+		if self.xp >= skill_level+1
+		{
+			return skill_level+1;
+		}
+		return 0;
+	}
+
+	pub fn practice_combat(&mut self) -> bool
+	{
+		let cost = self.xp_cost(self.combat);
+		if cost > 0
+		{
+			self.xp -= cost;
+			self.combat += 1;
+			return true;
+		}
+		return false;
+	}
+
+	pub fn unwield(&mut self)
+	{
+		self.wielded = "fist".to_string();
+		self.damage_dice = Dice { number: 1, die: 2};
+	}
+
 	pub fn list_inventory(&self) -> String
 	{
 		let mut result = String::new();
@@ -157,8 +188,13 @@ impl Mobile
 			return None;
 		}
 		let item = self.inventory.remove(pos);
+		let slot_code = item.category_code.clone();
 		item.drop_item(self);
-		return Some(item);
+		match slot_code
+		{
+			ItemCategoryCode::Misc => { self.misc_items_slots += 1; return Some(item); },
+			ItemCategoryCode::Weapon => { self.weapon_slots += 1; return Some(item); },
+		}
 	}
 
 	pub fn fetch_item_by_name(&mut self, key: String) -> Option<Box<Item> >
@@ -179,14 +215,25 @@ impl Mobile
 		return None;
 	}
 
-	pub fn unwield(&mut self)
+	pub fn has_room_for_item(&mut self, item: &Box<Item>) -> bool
 	{
+		match item.category_code
+		{
+			ItemCategoryCode::Misc => { return self.misc_items_slots > 0; },
+			ItemCategoryCode::Weapon => { return self.weapon_slots > 0; },
+		}
 	}
 
 	pub fn add_item(&mut self, mut item: Box<Item>)
 	{
+		let slot_code = item.category_code.clone();
 		item.got_item(self);
 		self.inventory.push(item);
+		match slot_code
+		{
+			ItemCategoryCode::Misc => { self.misc_items_slots -= 1; },
+			ItemCategoryCode::Weapon => { self.weapon_slots -= 1; },
+		}
 	}
 
 	pub fn new_character(name: String) -> Box<Mobile>
@@ -214,7 +261,9 @@ impl Mobile
 				actions_used: 0,
 				wielded: "fist".to_string(),
 				damage_dice: Dice { number: 1, die: 2 },
-				inventory: Vec::new()
+				inventory: Vec::new(),
+				misc_items_slots: 10,
+				weapon_slots: 1
 			});
 	}
 
@@ -241,7 +290,9 @@ impl Mobile
 				actions_used: 0,
 				wielded: "bite".to_string(),
 				damage_dice: Dice { number: 1, die: 1 },
-				inventory: Vec::new()
+				inventory: Vec::new(),
+				misc_items_slots: 0,
+				weapon_slots: 0
 			});
 	}
 	pub fn rabbit() -> Box<Mobile>
@@ -267,7 +318,9 @@ impl Mobile
 				actions_used: 0,
 				wielded: "bite".to_string(),
 				damage_dice: Dice { number: 1, die: 1 },
-				inventory: vec![ Item::rabbit_foot() ]
+				inventory: vec![ Item::rabbit_foot() ],
+				misc_items_slots: 0,
+				weapon_slots: 0
 			});
 	}
 
@@ -294,7 +347,62 @@ impl Mobile
 				actions_used: 0,
 				wielded: "fist".to_string(),
 				damage_dice: Dice { number: 1, die: 2 },
-				inventory: Vec::new()
+				inventory: Vec::new(),
+				misc_items_slots: 1,
+				weapon_slots: 1
 			});
+	}
+
+	pub fn foppish_dandy() -> Box<Mobile>	
+	{
+		let mut mobile = Box::new(
+			Mobile {
+				id: Uuid::new_v4(),
+				name: "foppish dandy".to_string(),
+				description: "A foppish dandy looks at you disdainfully.".to_string(),
+				arrive_prefix: "A foppish dandy arrives".to_string(),
+				leave_prefix: "A foppish dandy leaves".to_string(),
+				strength: 10,
+				dexterity: 10,
+				constitution: 10,
+				intelligence: 10,
+				wisdom: 8,
+				charisma: 13,
+				combat: 0,
+				damage: 0,
+				luck: 0,
+				xp: 0,
+				actions_per_tick: 1,
+				actions_used: 0,
+				wielded: "fist".to_string(),
+				damage_dice: Dice { number: 1, die: 2 },
+				inventory: Vec::new(),
+				misc_items_slots: 1,
+				weapon_slots: 1
+			});
+		let weapon = Item::sword();
+		mobile.add_item(weapon);
+		return mobile;
+	}
+}
+
+#[cfg(test)]
+mod mobile_unit_test
+{
+	use super::*;
+	use crate::items::*;
+
+	#[test]
+	fn test_slots()
+	{
+		let mut foot = Item::rabbit_foot();
+		let mut mobile = Mobile::new_character("Jim".to_string());
+		while mobile.has_room_for_item(&foot)
+		{
+			mobile.add_item(foot);
+			foot = Item::rabbit_foot();
+		}
+		mobile.fetch_item_by_position(0);
+		assert!(mobile.has_room_for_item(&foot));
 	}
 }

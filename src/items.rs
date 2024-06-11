@@ -1,12 +1,21 @@
 use crate::object::Object;
 use crate::mobile::*;
+use crate::dice::*;
 
 #[derive(Copy,Clone)]
 pub enum ItemTypeCode
 {
 	RabbitFoot,
 	ForestDebris,
-	Corpse
+	Corpse,
+	Sword
+}
+
+#[derive(Copy,Clone)]
+pub enum ItemCategoryCode
+{
+	Misc,
+	Weapon
 }
 
 pub struct Item
@@ -14,6 +23,7 @@ pub struct Item
 	pub description: String,
 	pub name: String,
 	pub type_code: ItemTypeCode,
+	pub category_code: ItemCategoryCode,
 	// How many ticks until it goes away?
 	pub lifetime: u32,
 	// How much xp for getting this item?
@@ -47,6 +57,7 @@ impl Item
 		match self.type_code
 		{
 			ItemTypeCode::RabbitFoot => { mobile.luck += 1; }
+			ItemTypeCode::Sword => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 8}; }
 			_ => { return; }
 		}
 	}
@@ -56,6 +67,7 @@ impl Item
 		match self.type_code
 		{
 			ItemTypeCode::RabbitFoot => { mobile.luck -= 1; }
+			ItemTypeCode::Sword => { mobile.unwield(); }
 			_ => { return; }
 		}
 	}
@@ -73,11 +85,25 @@ impl Item
 				description: "A dead ".to_string()+&in_life+" is here.",
 				name: in_life+" corpse",
 				type_code: ItemTypeCode::Corpse,
+				category_code: ItemCategoryCode::Misc,
 				xp_value: 0,
 				lifetime: 100,
 			});
 	}
 
+	pub fn sword() -> Box<Item>
+	{
+		return Box::new(
+			Item
+			{
+				description: "A sword is here.".to_string(),
+				name: "sword".to_string(),
+				type_code: ItemTypeCode::Sword,
+				category_code: ItemCategoryCode::Weapon,
+				xp_value: 1,
+				lifetime: 1000,
+			});
+	}
 	pub fn rabbit_foot() -> Box<Item>
 	{
 		return Box::new(
@@ -86,6 +112,7 @@ impl Item
 				description: "A soft rabbits foot is here.".to_string(),
 				name: "rabbit foot".to_string(),
 				type_code: ItemTypeCode::RabbitFoot,
+				category_code: ItemCategoryCode::Misc,
 				xp_value: 1,
 				lifetime: 1000,
 			});
@@ -98,6 +125,7 @@ impl Item
 				description: "Some twigs and leaves litter the forest floor.".to_string(),
 				name: "leaves and twigs".to_string(),
 				type_code: ItemTypeCode::ForestDebris,
+				category_code: ItemCategoryCode::Misc,
 				xp_value: 0,
 				lifetime: std::u32::MAX,
 			});
