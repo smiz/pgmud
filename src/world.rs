@@ -53,9 +53,17 @@ impl WorldState
 		}
 	}
 
+	pub fn fetch_mobile_by_name(&mut self, x: i16, y: i16, key: &String) -> Option<Box<Mobile> >
+	{
+		let mut location = self.map.fetch(x,y);
+		let mobile = location.fetch_mobile_by_name(key);
+		self.map.replace(location);
+		return mobile;
+	}
+
 	// Find and return a mobile by name. This removes it from the world and it
 	// must be added back to the world when you are done with it.
-	pub fn get_mobile_id_by_name(&mut self, x: i16, y: i16, key: String) -> Option<Uuid>
+	pub fn get_mobile_id_by_name(&mut self, x: i16, y: i16, key: &String) -> Option<Uuid>
 	{
 		let mut location = self.map.fetch(x,y);
 		let mobile = location.fetch_mobile_by_name(key);

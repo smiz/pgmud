@@ -24,12 +24,15 @@ pub struct Mobile
 	pub xp: i16,
 	// Hit points of damage sustained
 	pub damage: i16,
+	pub max_damage: i16,
 	// Actions per tick,
 	pub actions_per_tick: i16,
 	// Actions used in current tick
 	pub actions_used: i16,
 	// Skills
 	pub combat: i16,
+	pub steal: i16,
+	pub perception: i16,
 	// Description of the object we are using as a weapon
 	pub wielded: String,
 	// Damage done by our attack
@@ -57,7 +60,9 @@ impl Object for Mobile
 		result += &(", xp: ".to_string()+&(self.xp.to_string()));
 		result += &(", dmg: ".to_string()+&(self.damage.to_string())+&"/".to_string()+&(self.max_hit_points().to_string()));
 		result += "\n";
-		result += &("combat: ".to_string()+&(self.combat.to_string()));
+		result += &("combat: ".to_string()+&(self.combat.to_string())+"\n");
+		result += &("steal: ".to_string()+&(self.steal.to_string())+"\n");
+		result += &("perception: ".to_string()+&(self.perception.to_string())+"\n");
 		return result;
 	}
 
@@ -78,9 +83,10 @@ impl Mobile
 
 	fn xp_cost(&self, skill_level: i16) -> i16
 	{
-		if self.xp >= skill_level+1
+		let cost = 2*(skill_level+1);
+		if self.xp >= cost
 		{
-			return skill_level+1;
+			return cost;
 		}
 		return 0;
 	}
@@ -92,6 +98,30 @@ impl Mobile
 		{
 			self.xp -= cost;
 			self.combat += 1;
+			return true;
+		}
+		return false;
+	}
+
+	pub fn practice_perception(&mut self) -> bool
+	{
+		let cost = self.xp_cost(self.perception);
+		if cost > 0
+		{
+			self.xp -= cost;
+			self.perception += 1;
+			return true;
+		}
+		return false;
+	}
+
+	pub fn practice_steal(&mut self) -> bool
+	{
+		let cost = self.xp_cost(self.steal);
+		if cost > 0
+		{
+			self.xp -= cost;
+			self.steal += 1;
 			return true;
 		}
 		return false;
@@ -145,6 +175,16 @@ impl Mobile
 		return self.roll_skill(self.strength,self.combat);
 	}
 
+	pub fn roll_steal(&self) -> i16
+	{
+		return self.roll_skill(self.dexterity,self.steal);
+	}
+
+	pub fn roll_perception(&self) -> i16
+	{
+		return self.roll_skill(self.wisdom,self.perception);
+	}
+
 	pub fn get_id(&self) -> Uuid
 	{
 		return self.id;
@@ -168,7 +208,17 @@ impl Mobile
 
 	pub fn max_hit_points(&self) -> i16
 	{
-		return self.constitution;
+		return self.max_damage;
+	}
+
+	pub fn fetch_random_item(&mut self) -> Option<Box<Item> >
+	{
+		if self.inventory.is_empty()
+		{
+			return None;
+		}
+		let index = (rand::random::<usize>()) % self.inventory.len();
+		return self.fetch_item_by_position(index);
 	}
 
 	pub fn fetch_last_item(&mut self) -> Option<Box<Item> >
@@ -224,10 +274,10 @@ impl Mobile
 		}
 	}
 
-	pub fn add_item(&mut self, mut item: Box<Item>)
+	pub fn add_item(&mut self, mut item: Box<Item>, take_xp: bool)
 	{
 		let slot_code = item.category_code.clone();
-		item.got_item(self);
+		item.got_item(self,take_xp);
 		self.inventory.push(item);
 		match slot_code
 		{
@@ -239,6 +289,7 @@ impl Mobile
 	pub fn new_character(name: String) -> Box<Mobile>
 	{
 		let die = Dice { number: 3, die: 6 };
+		let constitution = die.roll();
 		return Box::new(
 			Mobile
 			{
@@ -249,13 +300,16 @@ impl Mobile
 				leave_prefix: name+" leaves",
 				strength: die.roll(),
 				dexterity: die.roll(),
-				constitution: die.roll(),
+				constitution: constitution,
+				max_damage: constitution,
 				intelligence: die.roll(),
 				wisdom: die.roll(),
 				charisma: die.roll(),
 				luck: 0,
 				xp: 0,
 				combat: 0,
+				steal: 0,
+				perception: 0,
 				damage: 0,	
 				actions_per_tick: 1,
 				actions_used: 0,
@@ -269,7 +323,7 @@ impl Mobile
 
 	pub fn rodent() -> Box<Mobile>
 	{
-		return Box::new(
+		let mut mobile = Box::new(
 			Mobile {
 				id: Uuid::new_v4(),
 				name: "rodent".to_string(),
@@ -279,6 +333,7 @@ impl Mobile
 				strength: 1,
 				dexterity: 18,
 				constitution: 3,
+				max_damage: 3,
 				intelligence: 2,
 				wisdom: 1,
 				charisma: 3,
@@ -286,18 +341,22 @@ impl Mobile
 				xp: 0,
 				combat: 0,
 				damage: 0,
+				steal: 0,
+				perception: 10,
 				actions_per_tick: 1,
 				actions_used: 0,
 				wielded: "bite".to_string(),
 				damage_dice: Dice { number: 1, die: 1 },
 				inventory: Vec::new(),
-				misc_items_slots: 0,
+				misc_items_slots: 1,
 				weapon_slots: 0
 			});
+		mobile.add_item(Item::healthy_nuts_and_seeds(),false);
+		return mobile;
 	}
 	pub fn rabbit() -> Box<Mobile>
 	{
-		return Box::new(
+		let mut mobile = Box::new(
 			Mobile {
 				id: Uuid::new_v4(),
 				name: "rabbit".to_string(),
@@ -307,6 +366,7 @@ impl Mobile
 				strength: 1,
 				dexterity: 18,
 				constitution: 3,
+				max_damage: 3,
 				intelligence: 2,
 				wisdom: 1,
 				charisma: 3,
@@ -314,19 +374,23 @@ impl Mobile
 				xp: 0,
 				combat: 0,
 				damage: 0,
+				steal: 0,
+				perception: 10,
 				actions_per_tick: 1,
 				actions_used: 0,
 				wielded: "bite".to_string(),
 				damage_dice: Dice { number: 1, die: 1 },
-				inventory: vec![ Item::rabbit_foot() ],
-				misc_items_slots: 0,
+				inventory: Vec::new(),
+				misc_items_slots: 1,
 				weapon_slots: 0
 			});
+		mobile.add_item(Item::rabbit_foot(),false);
+		return mobile;
 	}
 
 	pub fn beggar() -> Box<Mobile>	
 	{
-		return Box::new(
+		let mut mobile = Box::new(
 			Mobile {
 				id: Uuid::new_v4(),
 				name: "beggar".to_string(),
@@ -336,6 +400,7 @@ impl Mobile
 				strength: 5,
 				dexterity: 10,
 				constitution: 10,
+				max_damage: 10,
 				intelligence: 10,
 				wisdom: 3,
 				charisma: 10,
@@ -343,6 +408,8 @@ impl Mobile
 				damage: 0,
 				luck: 0,
 				xp: 0,
+				steal: 0,
+				perception: 1,
 				actions_per_tick: 1,
 				actions_used: 0,
 				wielded: "fist".to_string(),
@@ -351,6 +418,8 @@ impl Mobile
 				misc_items_slots: 1,
 				weapon_slots: 1
 			});
+		mobile.add_item(Item::green_penny(),false);
+		return mobile;
 	}
 
 	pub fn foppish_dandy() -> Box<Mobile>	
@@ -365,6 +434,7 @@ impl Mobile
 				strength: 10,
 				dexterity: 10,
 				constitution: 10,
+				max_damage: 10,
 				intelligence: 10,
 				wisdom: 8,
 				charisma: 13,
@@ -372,6 +442,8 @@ impl Mobile
 				damage: 0,
 				luck: 0,
 				xp: 0,
+				steal: 0,
+				perception: 0,
 				actions_per_tick: 1,
 				actions_used: 0,
 				wielded: "fist".to_string(),
@@ -381,7 +453,7 @@ impl Mobile
 				weapon_slots: 1
 			});
 		let weapon = Item::sword();
-		mobile.add_item(weapon);
+		mobile.add_item(weapon,false);
 		return mobile;
 	}
 }
@@ -399,7 +471,7 @@ mod mobile_unit_test
 		let mut mobile = Mobile::new_character("Jim".to_string());
 		while mobile.has_room_for_item(&foot)
 		{
-			mobile.add_item(foot);
+			mobile.add_item(foot,true);
 			foot = Item::rabbit_foot();
 		}
 		mobile.fetch_item_by_position(0);

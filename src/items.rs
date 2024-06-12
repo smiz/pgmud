@@ -5,7 +5,9 @@ use crate::dice::*;
 #[derive(Copy,Clone)]
 pub enum ItemTypeCode
 {
+	HealthyNutsAndSeeds,
 	RabbitFoot,
+	GreenPenny,
 	ForestDebris,
 	Corpse,
 	Sword
@@ -50,13 +52,19 @@ impl Object for Item
 
 impl Item
 {
-	pub fn got_item(&mut self, mobile: &mut Mobile)
+
+	pub fn got_item(&mut self, mobile: &mut Mobile, take_xp: bool)
 	{
-		mobile.xp += self.xp_value;
-		self.xp_value = 0;
+		if take_xp
+		{
+			mobile.xp += self.xp_value;
+			self.xp_value = 0;
+		}
 		match self.type_code
 		{
 			ItemTypeCode::RabbitFoot => { mobile.luck += 1; }
+			ItemTypeCode::GreenPenny => { mobile.luck += 1; }
+			ItemTypeCode::HealthyNutsAndSeeds => { mobile.max_damage += 1; }
 			ItemTypeCode::Sword => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 8}; }
 			_ => { return; }
 		}
@@ -67,6 +75,8 @@ impl Item
 		match self.type_code
 		{
 			ItemTypeCode::RabbitFoot => { mobile.luck -= 1; }
+			ItemTypeCode::GreenPenny => { mobile.luck -= 1; }
+			ItemTypeCode::HealthyNutsAndSeeds => { mobile.max_damage -= 1; }
 			ItemTypeCode::Sword => { mobile.unwield(); }
 			_ => { return; }
 		}
@@ -115,6 +125,32 @@ impl Item
 				category_code: ItemCategoryCode::Misc,
 				xp_value: 1,
 				lifetime: 1000,
+			});
+	}
+	pub fn green_penny() -> Box<Item>
+	{
+		return Box::new(
+			Item
+			{
+				description: "A greenish penny is here.".to_string(),
+				name: "greenish penny".to_string(),
+				type_code: ItemTypeCode::GreenPenny,
+				category_code: ItemCategoryCode::Misc,
+				xp_value: 1,
+				lifetime: 10000,
+			});
+	}
+	pub fn healthy_nuts_and_seeds() -> Box<Item>
+	{
+		return Box::new(
+			Item
+			{
+				description: "You see a healthy mix of nuts & seeds.".to_string(),
+				name: "healthy nuts & seeds".to_string(),
+				type_code: ItemTypeCode::HealthyNutsAndSeeds,
+				category_code: ItemCategoryCode::Misc,
+				xp_value: 1,
+				lifetime: 10000,
 			});
 	}
 	pub fn forest_debris() -> Box<Item>

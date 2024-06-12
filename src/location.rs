@@ -135,7 +135,7 @@ impl Location
 		}
 	}
 
-	pub fn fetch_mobile_by_name(&mut self, key: String) -> Option<Box<Mobile> >
+	pub fn fetch_mobile_by_name(&mut self, key: &String) -> Option<Box<Mobile> >
 	{
 		let mut lower_case_key = key.clone();
 		lower_case_key.make_ascii_lowercase();

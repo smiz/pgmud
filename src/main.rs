@@ -1,5 +1,5 @@
 use std::{
-	io::{prelude::*,ErrorKind,stdout},
+	io::{prelude::*,ErrorKind},
 	net::{TcpListener,TcpStream},
 	thread,
 	sync::{Arc,Mutex},
@@ -57,7 +57,7 @@ fn get_item(uuid: Uuid, world: &mut WorldState, target: String) -> String
 		let item = item.unwrap();
 		if mobile.has_room_for_item(&item)
 		{
-			mobile.add_item(item);
+			mobile.add_item(item,true);
 		}
 		else
 		{
@@ -82,6 +82,14 @@ fn practice(uuid: Uuid, world: &mut WorldState, skill: String) -> String
 	if skill == "combat"
 	{
 		success = mobile.practice_combat();
+	}
+	else if skill == "steal"
+	{
+		success = mobile.practice_steal();
+	}
+	else if skill == "perception"
+	{
+		success = mobile.practice_perception();
 	}
 	else
 	{
@@ -120,10 +128,21 @@ fn drop_item(uuid: Uuid, world: &mut WorldState, target: String) -> String
 fn kill(uuid: Uuid, world: &mut WorldState, target: String, event_q: &mut EventList)
 {
 	let position = world.find_mobile_location(uuid).unwrap();
-	let defender = world.get_mobile_id_by_name(position.0,position.1,target);
+	let defender = world.get_mobile_id_by_name(position.0,position.1,&target);
 	match defender
 	{
 		Some(defender) => { event_q.insert(Box::new(CombatEvent { attacker: uuid, defender: defender })); },
+		_ => { return; }
+	}
+}
+
+fn steal(uuid: Uuid, world: &mut WorldState, target: String, event_q: &mut EventList)
+{
+	let position = world.find_mobile_location(uuid).unwrap();
+	let mark = world.get_mobile_id_by_name(position.0,position.1,&target);
+	match mark
+	{
+		Some(mark) => { event_q.insert(Box::new(StealEvent { thief: uuid, mark: mark })); },
 		_ => { return; }
 	}
 }
@@ -137,6 +156,28 @@ fn goto(uuid: Uuid, dx: i16, dy: i16, event_q: &mut EventList)
 			dy: dy
 		});
 	event_q.insert(move_event);
+}
+
+fn look_at(uuid: Uuid, world: &mut WorldState, target: String) -> String
+{
+	let position = world.find_mobile_location(uuid).unwrap();
+	let mobile = world.fetch_mobile_by_name(position.0,position.1,&target);
+	if mobile.is_some()
+	{
+		let mobile = mobile.unwrap();
+		let description = mobile.description()+"\nCarrying:\n"+&mobile.list_inventory();
+		world.add_mobile(mobile,position.0,position.1);
+		return description;
+	}
+	let item = world.fetch_item_by_name(position.0,position.1,&target);
+	if item.is_some()
+	{
+		let item = item.unwrap();
+		let description = item.description();
+		world.add_item(position.0,position.1,item);
+		return description;
+	}
+	return "Look at what?".to_string();	
 }
 
 fn look(uuid: Uuid, world: &mut WorldState) -> String
@@ -175,7 +216,7 @@ fn load_character(world_obj: Arc<Mutex<WorldState> >) -> Uuid
 // Get input from the user and dispatch commands
 fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >)
 {
-	let mut has_input = true;
+	let mut has_input = false;
 	let mut print_prompt = true;
 	let mut now = SystemTime::now();
 	let mut last_msg_read_time = SystemTime::now();
@@ -196,7 +237,6 @@ fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >)
 		input.clear();
 		loop
 		{
-			has_input = false;
 			let mut buf = vec![0;128];
 			let n = match stream.read(&mut buf)
 			{
@@ -222,6 +262,9 @@ fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >)
 		// Process commands
 		if has_input
 		{
+			// Got the input
+			has_input = false;
+			// Process the input
 			let input_string = String::from_utf8_lossy(&input);
 			let clean_input_string = input_string.trim();
 			let mut world = world_obj.lock().unwrap();
@@ -230,75 +273,96 @@ fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >)
 			// We are alive. Process the command.
 			print_prompt = true;
 			let mut tokens = clean_input_string.split_whitespace();
-			match tokens.next().unwrap().as_ref()
+			match tokens.next()
 			{
-				"e" =>
+				None => { continue; },
+				Some(token) =>
+				{
+					match token.as_ref() 
 					{
-						goto(uuid,1,0,&mut event_q);
-					},
-				"w" =>
-					{
-						goto(uuid,-1,0,&mut event_q);
-					},
-				"n" =>
-					{
-						goto(uuid,0,1,&mut event_q);
-					},
-				"s" =>
-					{
-						goto(uuid,0,-1,&mut event_q);
-					},
-				"look" =>
-					{
-						stream.write_all(look(uuid,&mut *world).as_bytes()).unwrap();
-					},
-				"kill" =>
-					{
-						let target = tokens.next();
-						match target
-						{
-							Some(target) => { kill(uuid,&mut* world,target.to_string(),&mut event_q); },
-							None => { stream.write_all(b"Kill what?").unwrap(); }
-						}
+						"e" =>
+							{
+								goto(uuid,1,0,&mut event_q);
+							},
+						"w" =>
+							{
+								goto(uuid,-1,0,&mut event_q);
+							},
+						"n" =>
+							{
+								goto(uuid,0,1,&mut event_q);
+							},
+						"s" =>
+							{
+								goto(uuid,0,-1,&mut event_q);
+							},
+						"look" =>
+							{
+								let target = tokens.next();
+								match target
+								{
+									Some(target) => { stream.write_all(look_at(uuid,&mut* world,target.to_string()).as_bytes()).unwrap(); },
+									None => { stream.write_all(look(uuid,&mut *world).as_bytes()).unwrap(); }
+								}
+							},
+						"kill" =>
+							{
+								let target = tokens.next();
+								match target
+								{
+									Some(target) => { kill(uuid,&mut* world,target.to_string(),&mut event_q); },
+									None => { stream.write_all(b"Kill what?").unwrap(); }
+								}
+							}
+						"steal" =>
+							{
+								let target = tokens.next();
+								match target
+								{
+									Some(target) => { steal(uuid,&mut* world,target.to_string(),&mut event_q); },
+									None => { stream.write_all(b"Steal from whom?").unwrap(); }
+								}
+							}
+						"get" =>
+							{
+								let target = tokens.next();
+								match target
+								{
+									Some(target) => { stream.write_all(get_item(uuid,&mut* world,target.to_string()).as_bytes()).unwrap(); },
+									None => { stream.write_all(b"Get what?").unwrap(); }
+								}
+							}
+						"drop" =>
+							{
+								let target = tokens.next();
+								match target
+								{
+									Some(target) => { stream.write_all(drop_item(uuid,&mut* world,target.to_string()).as_bytes()).unwrap(); },
+									None => { stream.write_all(b"Drop what?").unwrap(); }
+								}
+							}
+						"prac" =>
+							{
+								let target = tokens.next();
+								match target
+								{
+									Some(target) => { stream.write_all(practice(uuid,&mut* world,target.to_string()).as_bytes()).unwrap(); },
+									None => { stream.write_all(b"Practice what?").unwrap(); }
+								}
+							}
+						"quit" =>
+							{
+								world.fetch_mobile(uuid);
+								return;
+							}
+						"stats" => { stream.write_all(show_stats(uuid,&mut* world).as_bytes()).unwrap(); }
+						"i" => { stream.write_all(show_inventory(uuid,&mut* world).as_bytes()).unwrap(); }
+						_ =>
+							{
+								stream.write_all(b"What?").unwrap();
+							}
 					}
-				"get" =>
-					{
-						let target = tokens.next();
-						match target
-						{
-							Some(target) => { stream.write_all(get_item(uuid,&mut* world,target.to_string()).as_bytes()).unwrap(); },
-							None => { stream.write_all(b"Get what?").unwrap(); }
-						}
-					}
-				"drop" =>
-					{
-						let target = tokens.next();
-						match target
-						{
-							Some(target) => { stream.write_all(drop_item(uuid,&mut* world,target.to_string()).as_bytes()).unwrap(); },
-							None => { stream.write_all(b"Drop what?").unwrap(); }
-						}
-					}
-				"prac" =>
-					{
-						let target = tokens.next();
-						match target
-						{
-							Some(target) => { stream.write_all(practice(uuid,&mut* world,target.to_string()).as_bytes()).unwrap(); },
-							None => { stream.write_all(b"Drop what?").unwrap(); }
-						}
-					}
-				"quit" =>
-					{
-						world.fetch_mobile(uuid);
-						return;
-					}
-				"stats" => { stream.write_all(show_stats(uuid,&mut* world).as_bytes()).unwrap(); }
-				"i" => { stream.write_all(show_inventory(uuid,&mut* world).as_bytes()).unwrap(); }
-				_ =>
-					{
-						stream.write_all(b"What?").unwrap();
-					}
+				}
 			}
 		}
 		// Run a tick

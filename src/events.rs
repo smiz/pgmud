@@ -247,7 +247,7 @@ pub struct WanderingMonsterLocationVisitor
 
 impl LocationVisitor for WanderingMonsterLocationVisitor
 {
-	fn visit_location(&mut self, location: &mut Box<Location>, messages: &mut MessageList)
+	fn visit_location(&mut self, location: &mut Box<Location>, _messages: &mut MessageList)
 	{
 		match location.location_type
 		{
@@ -375,3 +375,90 @@ impl AgeEvent
 	}
 }
 
+// One mobile steals from another
+pub struct StealEvent
+{
+	pub thief: Uuid,
+	pub mark: Uuid,
+}
+
+impl Event for StealEvent
+{
+	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
+	{
+		let a_location = world.find_mobile_location(self.thief);
+		let b_location = world.find_mobile_location(self.mark);
+		if !a_location.is_some()
+		{
+			return;
+		}
+		if !b_location.is_some()
+		{
+			world.message_list.post_for_target("Steal from who?".to_string(),self.thief);
+			return;
+		}
+		let a_position = a_location.unwrap();
+		let b_position = b_location.unwrap();
+		if a_position != b_position
+		{
+			world.message_list.post_for_target("Steal from who?".to_string(),self.thief);
+			return;
+		}
+		let a = world.fetch_mobile(self.thief);
+		let b = world.fetch_mobile(self.mark);
+		if a.is_some() && b.is_some()
+		{
+			let mut a = a.unwrap();
+			let mut b = b.unwrap();
+			// If we have an action available, then use it attempting to steal
+			if a.use_action()
+			{
+				if a.roll_steal() > b.roll_perception()
+				{
+					let item = b.fetch_random_item();
+					if item.is_some()
+					{
+						let item = item.unwrap();
+						if a.has_room_for_item(&item)
+						{
+							world.message_list.post_for_target("You stole a ".to_string()+&item.get_name(),a.get_id());
+							a.add_item(item,true);
+						}
+						else
+						{
+							world.message_list.post_for_target("You don't have room for ".to_string()+&item.get_name()+"!",a.get_id());
+							b.add_item(item,false);
+						}
+					}
+					else
+					{
+						world.message_list.post_for_target("You come up empty handed!".to_string(),a.get_id());
+					}
+				}
+				else
+				{
+					world.message_list.broadcast(a.name.clone()+" is a thief!",a_position.0,a_position.1);	
+					event_q.insert(Box::new(CombatEvent { attacker: self.mark, defender: self.thief }));
+				}
+			}
+			// Otherwise wait until we have an action
+			else
+			{
+				event_q.insert(Box::new(StealEvent { thief: self.thief, mark: self.mark }));
+			}
+			// Restore the mobiles to the map
+			world.add_mobile(a,a_position.0,a_position.1);
+			world.add_mobile(b,a_position.0,a_position.1);
+			return;
+		}
+		if a.is_some()
+		{
+			world.message_list.post_for_target("Steal from who?".to_string(),self.thief);
+			world.add_mobile(a.unwrap(),a_position.0,a_position.1);
+		}
+		if b.is_some()
+		{
+			world.add_mobile(b.unwrap(),b_position.0,b_position.1);
+		}
+	}
+}
