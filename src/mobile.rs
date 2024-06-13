@@ -41,7 +41,7 @@ pub struct Mobile
 	inventory: Vec<Box<Item > >,
 	// Maximum miscellaneous that can be carried
 	pub misc_items_slots: u8,
-	pub weapon_slots: u8
+	pub is_armed: bool
 }
 
 impl Object for Mobile
@@ -63,6 +63,8 @@ impl Object for Mobile
 		result += &("combat: ".to_string()+&(self.combat.to_string())+"\n");
 		result += &("steal: ".to_string()+&(self.steal.to_string())+"\n");
 		result += &("perception: ".to_string()+&(self.perception.to_string())+"\n");
+		result += &("misc. slots: ".to_string()+&(self.misc_items_slots).to_string()+"\n");
+		result += &("armed: ".to_string()+&(self.is_armed).to_string()+"\n");
 		return result;
 	}
 
@@ -243,7 +245,7 @@ impl Mobile
 		match slot_code
 		{
 			ItemCategoryCode::Misc => { self.misc_items_slots += 1; return Some(item); },
-			ItemCategoryCode::Weapon => { self.weapon_slots += 1; return Some(item); },
+			ItemCategoryCode::Weapon => { self.is_armed = false; return Some(item); },
 		}
 	}
 
@@ -270,7 +272,7 @@ impl Mobile
 		match item.category_code
 		{
 			ItemCategoryCode::Misc => { return self.misc_items_slots > 0; },
-			ItemCategoryCode::Weapon => { return self.weapon_slots > 0; },
+			ItemCategoryCode::Weapon => { return !self.is_armed; },
 		}
 	}
 
@@ -282,7 +284,7 @@ impl Mobile
 		match slot_code
 		{
 			ItemCategoryCode::Misc => { self.misc_items_slots -= 1; },
-			ItemCategoryCode::Weapon => { self.weapon_slots -= 1; },
+			ItemCategoryCode::Weapon => { self.is_armed = true; },
 		}
 	}
 
@@ -317,7 +319,7 @@ impl Mobile
 				damage_dice: Dice { number: 1, die: 2 },
 				inventory: Vec::new(),
 				misc_items_slots: 10,
-				weapon_slots: 1
+				is_armed: false
 			});
 	}
 
@@ -349,7 +351,7 @@ impl Mobile
 				damage_dice: Dice { number: 1, die: 1 },
 				inventory: Vec::new(),
 				misc_items_slots: 1,
-				weapon_slots: 0
+				is_armed: true
 			});
 		mobile.add_item(Item::healthy_nuts_and_seeds(),false);
 		return mobile;
@@ -382,7 +384,7 @@ impl Mobile
 				damage_dice: Dice { number: 1, die: 1 },
 				inventory: Vec::new(),
 				misc_items_slots: 1,
-				weapon_slots: 0
+				is_armed: true
 			});
 		mobile.add_item(Item::rabbit_foot(),false);
 		return mobile;
@@ -416,7 +418,7 @@ impl Mobile
 				damage_dice: Dice { number: 1, die: 2 },
 				inventory: Vec::new(),
 				misc_items_slots: 1,
-				weapon_slots: 1
+				is_armed: false
 			});
 		mobile.add_item(Item::green_penny(),false);
 		return mobile;
@@ -450,7 +452,7 @@ impl Mobile
 				damage_dice: Dice { number: 1, die: 2 },
 				inventory: Vec::new(),
 				misc_items_slots: 1,
-				weapon_slots: 1
+				is_armed: false
 			});
 		let weapon = Item::sword();
 		mobile.add_item(weapon,false);

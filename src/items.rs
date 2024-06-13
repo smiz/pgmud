@@ -177,10 +177,10 @@ mod items_unit_test
 	#[test]
 	fn add_rabbit_foot_test()
 	{
-		let mut foot = Item::rabbit_foot();
+		let foot = Item::rabbit_foot();
 		let mut mobile = Mobile::new_character("Jim".to_string());
 		let luck = mobile.luck;
-		mobile.add_item(foot);
+		mobile.add_item(foot,true);
 		assert_eq!(luck+1,mobile.luck);
 		let new_foot = mobile.fetch_item_by_position(0);
 		assert_eq!(luck,mobile.luck);
