@@ -10,7 +10,8 @@ pub enum ItemTypeCode
 	GreenPenny,
 	ForestDebris,
 	Corpse,
-	Sword
+	Sword,
+	PointedStick
 }
 
 #[derive(Copy,Clone)]
@@ -66,6 +67,7 @@ impl Item
 			ItemTypeCode::GreenPenny => { mobile.luck += 1; }
 			ItemTypeCode::HealthyNutsAndSeeds => { mobile.max_damage += 1; }
 			ItemTypeCode::Sword => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 8}; }
+			ItemTypeCode::PointedStick => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 4}; }
 			_ => { return; }
 		}
 	}
@@ -78,6 +80,7 @@ impl Item
 			ItemTypeCode::GreenPenny => { mobile.luck -= 1; }
 			ItemTypeCode::HealthyNutsAndSeeds => { mobile.max_damage -= 1; }
 			ItemTypeCode::Sword => { mobile.unwield(); }
+			ItemTypeCode::PointedStick => { mobile.unwield(); }
 			_ => { return; }
 		}
 	}
@@ -112,6 +115,20 @@ impl Item
 				category_code: ItemCategoryCode::Weapon,
 				xp_value: 1,
 				lifetime: 1000,
+			});
+	}
+
+	pub fn pointed_stick() -> Box<Item>
+	{
+		return Box::new(
+			Item
+			{
+				description: "A pointed stick is here.".to_string(),
+				name: "pointed stick".to_string(),
+				type_code: ItemTypeCode::PointedStick,
+				category_code: ItemCategoryCode::Weapon,
+				xp_value: 1,
+				lifetime: 100,
 			});
 	}
 	pub fn rabbit_foot() -> Box<Item>

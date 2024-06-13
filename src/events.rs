@@ -286,7 +286,7 @@ impl WanderingMonsterLocationVisitor
 			3 => { return Some(Mobile::rodent()); },
 			4 => { return Some(Mobile::rodent()); },
 			5 => { return Some(Mobile::rabbit()); },
-			6 => { return Some(Mobile::foppish_dandy()); },
+			6 => { return Some(Mobile::goblin()); },
 			_ => { return None; }
 		}
 	}

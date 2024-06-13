@@ -424,6 +424,41 @@ impl Mobile
 		return mobile;
 	}
 
+	pub fn goblin() -> Box<Mobile>	
+	{
+		let mut mobile = Box::new(
+			Mobile {
+				id: Uuid::new_v4(),
+				name: "goblin".to_string(),
+				description: "A goblin menaces you with his stick.".to_string(),
+				arrive_prefix: "A goblin arrives".to_string(),
+				leave_prefix: "A goblin leaves".to_string(),
+				strength: 5,
+				dexterity: 10,
+				constitution: 10,
+				max_damage: 10,
+				intelligence: 10,
+				wisdom: 3,
+				charisma: 10,
+				combat: 0,
+				damage: 0,
+				luck: 0,
+				xp: 0,
+				steal: 0,
+				perception: 1,
+				actions_per_tick: 1,
+				actions_used: 0,
+				wielded: "fist".to_string(),
+				damage_dice: Dice { number: 1, die: 2 },
+				inventory: Vec::new(),
+				misc_items_slots: 1,
+				is_armed: false
+			});
+		let weapon = Item::pointed_stick();
+		mobile.add_item(weapon,false);
+		return mobile;
+	}
+
 	pub fn foppish_dandy() -> Box<Mobile>	
 	{
 		let mut mobile = Box::new(
