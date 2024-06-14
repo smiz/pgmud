@@ -1,5 +1,6 @@
 use crate::location::Location;
 use crate::location::LocationTypeCode;
+use crate::dice::*;
 use std::collections::BTreeMap;
 use crate::message::*;
 
@@ -28,6 +29,16 @@ impl Map
 		return map;
 	}
 
+	pub fn get_location_type(&self, x: i16, y: i16) -> LocationTypeCode
+	{
+		let location = self.location_by_position.get(&(x,y));
+		match location
+		{
+			Some(location) => { return location.location_type; },
+			_ => { return LocationTypeCode::Unexplored; }
+		}
+	}
+
 	// Fetch the location at x,y. It must be replaced when you
 	// are done with the location.
 	pub fn fetch(&mut self, x: i16, y: i16) -> Box<Location>
@@ -48,11 +59,32 @@ impl Map
 		// Update all of the mobile positions
 	}
 
+	fn count_adjacent(&self, x:i16, y: i16, location_type: LocationTypeCode) -> usize
+	{
+		let mut count = 0;
+		if self.get_location_type(y-1,x) == location_type { count += 1; }
+		if self.get_location_type(y+1,x) == location_type { count += 1; }
+		if self.get_location_type(y,x-1) == location_type { count += 1; }
+		if self.get_location_type(y,x+1) == location_type { count += 1; }
+		return count;
+	}
+
 	fn make_new_location(&mut self, x: i16, y: i16) -> Box<Location>
 	{
-		return Box::new(
-			Location::new(x,y,LocationTypeCode::Forest,"In the forest".to_string())
-		);
+		let dice = Dice { number: 1, die: 10 };
+		let _forest_count = self.count_adjacent(x,y,LocationTypeCode::Forest);
+		let town_count = self.count_adjacent(x,y,LocationTypeCode::Town);
+		let unexplored_count = self.count_adjacent(x,y,LocationTypeCode::Unexplored);
+		if town_count > 0 || unexplored_count > 1 || dice.roll() < 10
+		{
+			return Box::new(
+				Location::new(x,y,LocationTypeCode::Forest,"In the forest".to_string()));
+		}
+		else
+		{
+			return Box::new(
+				Location::new(x,y,LocationTypeCode::Town,"A small town".to_string()));
+		}
 	}
 
 	pub fn visit_all_locations(&mut self, visitor: &mut impl LocationVisitor, messages: &mut MessageList)

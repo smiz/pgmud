@@ -3,7 +3,8 @@ use std::{
 	net::{TcpListener,TcpStream},
 	thread,
 	sync::{Arc,Mutex},
-	time::{Duration,SystemTime}
+	time::{Duration,SystemTime},
+	collections::LinkedList
 };
 use uuid::Uuid;
 
@@ -125,7 +126,7 @@ fn drop_item(uuid: Uuid, world: &mut WorldState, target: String) -> String
 	return result;
 }
 
-fn kill(uuid: Uuid, world: &mut WorldState, target: String, event_q: &mut EventList)
+fn kill(uuid: Uuid, world: &mut WorldState, event_q: &mut EventList, target: &String)
 {
 	let position = world.find_mobile_location(uuid).unwrap();
 	let defender = world.get_mobile_id_by_name(position.0,position.1,&target);
@@ -136,7 +137,7 @@ fn kill(uuid: Uuid, world: &mut WorldState, target: String, event_q: &mut EventL
 	}
 }
 
-fn steal(uuid: Uuid, world: &mut WorldState, target: String, event_q: &mut EventList)
+fn steal(uuid: Uuid, world: &mut WorldState, event_q: &mut EventList, target: &String)
 {
 	let position = world.find_mobile_location(uuid).unwrap();
 	let mark = world.get_mobile_id_by_name(position.0,position.1,&target);
@@ -158,7 +159,7 @@ fn goto(uuid: Uuid, dx: i16, dy: i16, event_q: &mut EventList)
 	event_q.insert(move_event);
 }
 
-fn look_at(uuid: Uuid, world: &mut WorldState, target: String) -> String
+fn look_at(uuid: Uuid, world: &mut WorldState, target: &String) -> String
 {
 	let position = world.find_mobile_location(uuid).unwrap();
 	let mobile = world.fetch_mobile_by_name(position.0,position.1,&target);
@@ -213,212 +214,203 @@ fn load_character(world_obj: Arc<Mutex<WorldState> >) -> Uuid
 	return uuid;	
 }
 
-// Get input from the user and dispatch commands
-fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >)
+fn process_command(command: &mut LinkedList<String>, uuid: Uuid, world: &mut WorldState, event_q: &mut EventList) -> String
 {
-	let mut has_input = false;
+	if command.is_empty()
+	{
+		return "What?".to_string();
+	}
+	let action = command.pop_front();
+	match action.unwrap().as_ref()
+	{
+		"e" => { goto(uuid,1,0,event_q); return String::new(); }
+		"w" => { goto(uuid,-1,0,event_q); return String::new(); }
+		"n" => { goto(uuid,0,1,event_q); return String::new(); } 
+		"s" => { goto(uuid,0,-1,event_q); return String::new(); }
+		"look" =>
+			{
+				let target = command.pop_front();
+				match target.as_ref()
+				{
+					Some(target) => { return look_at(uuid,world,target); },
+					None => { return look(uuid,world); }
+				}
+			},
+		"kill" =>
+			{
+				let target = command.pop_front();
+				match target.as_ref()
+				{
+					Some(target) => { kill(uuid,world,event_q,&target); return String::new(); },
+					None => { return "Kill what?".to_string(); }
+				}
+			},
+		"steal" =>
+			{
+				let target = command.pop_front();
+				match target.as_ref()
+				{
+					Some(target) => { steal(uuid,world,event_q,target); return String::new(); },
+					None => { return "Steal from whom?".to_string(); }
+				}
+			},
+		"get" =>
+			{
+				let target = command.pop_front();
+				match target.as_ref()
+				{
+					Some(target) => { return get_item(uuid,world,target.to_string()); },
+					None => { return "Get what?".to_string(); }
+				}
+			},
+		"drop" =>
+			{
+				let target = command.pop_front();
+				match target.as_ref()
+				{
+					Some(target) => { return drop_item(uuid,world,target.to_string()); },
+					None => { return "Drop what?".to_string(); }
+				}
+			},
+		"prac" =>
+			{
+				let target = command.pop_front();
+				match target.as_ref()
+				{
+					Some(target) => { return practice(uuid,world,target.to_string()); },
+					None => { return "Practice what?".to_string(); }
+				}
+			},
+		"quit" =>
+			{
+				world.fetch_mobile(uuid);
+				return "Goodbye!".to_string();
+			}
+		"stats" => { return show_stats(uuid,world); }
+		"i" => { return show_inventory(uuid,world); }
+		_ =>
+			{
+				return "What?".to_string();
+			}
+	}
+}
+
+// Get input from the user and dispatch commands
+fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >, event_q_obj: Arc<Mutex<EventList> >)
+{
+	let mut command : LinkedList<String> = LinkedList::new();
 	let mut print_prompt = true;
-	let mut now = SystemTime::now();
-	let mut last_msg_read_time = SystemTime::now();
-	let mut last_msg_read = String::new();
-	let mut event_q = EventList::new();
+	let mut _now = SystemTime::now();
+	let mut last_message_list_read_time = SystemTime::now();
+	let mut message_for_user = String::new();
 	let uuid = load_character(world_obj.clone());
 	let mut input: Vec<u8> = vec![];
 	let _ = stream.set_read_timeout(Some(Duration::from_millis(SUB_TICK.into())));
-	stream.write_all(b"Welcome!").unwrap();
+	let mut last_output_char = '\n';
+	stream.write_all(b"Welcome!\n").unwrap();
+	stream.flush().unwrap();
 	loop
 	{
+		let mut has_input = false;
 		if print_prompt
 		{
-			stream.write_all(b"\n>> ").unwrap();
+			if last_output_char != '\n'
+			{
+				stream.write_all(b"\n").unwrap();
+			}
+			stream.write_all(b">> ").unwrap();
 			stream.flush().unwrap();
+			last_output_char = ' ';
 		}
 		print_prompt = false;
-		input.clear();
-		loop
+		let mut buf = vec![0;128];
+		let n = match stream.read(&mut buf)
 		{
-			let mut buf = vec![0;128];
-			let n = match stream.read(&mut buf)
-			{
-				Err(e) =>
-					{
-						match e.kind()
-						{
-							ErrorKind::WouldBlock => { break; },
-							_ => { return; }
-						}
-					}
-				Ok(m) => { if m == 0 { return; } m }
-			};
-			buf.truncate(n);
-			input.extend_from_slice(&buf);
-			let end = input.last();
-			match end
-			{
-				Some(end) => if *end == b'\n' { has_input = true; break; },
-				_ => { continue; }
-			}
-		}
-		// Process commands
-		if has_input
-		{
-			// Got the input
-			has_input = false;
-			// Process the input
-			let input_string = String::from_utf8_lossy(&input);
-			let clean_input_string = input_string.trim();
-			let mut world = world_obj.lock().unwrap();
-			// Got the lock, make sure we are alive before processing a command
-			if check_if_dead(uuid,&mut world,&mut stream,last_msg_read_time) { return; }
-			// We are alive. Process the command.
-			print_prompt = true;
-			let mut tokens = clean_input_string.split_whitespace();
-			match tokens.next()
-			{
-				None => { continue; },
-				Some(token) =>
+			Err(e) =>
 				{
-					match token.as_ref() 
+					match e.kind()
 					{
-						"e" =>
-							{
-								goto(uuid,1,0,&mut event_q);
-							},
-						"w" =>
-							{
-								goto(uuid,-1,0,&mut event_q);
-							},
-						"n" =>
-							{
-								goto(uuid,0,1,&mut event_q);
-							},
-						"s" =>
-							{
-								goto(uuid,0,-1,&mut event_q);
-							},
-						"look" =>
-							{
-								let target = tokens.next();
-								match target
-								{
-									Some(target) => { stream.write_all(look_at(uuid,&mut* world,target.to_string()).as_bytes()).unwrap(); },
-									None => { stream.write_all(look(uuid,&mut *world).as_bytes()).unwrap(); }
-								}
-							},
-						"kill" =>
-							{
-								let target = tokens.next();
-								match target
-								{
-									Some(target) => { kill(uuid,&mut* world,target.to_string(),&mut event_q); },
-									None => { stream.write_all(b"Kill what?").unwrap(); }
-								}
-							}
-						"steal" =>
-							{
-								let target = tokens.next();
-								match target
-								{
-									Some(target) => { steal(uuid,&mut* world,target.to_string(),&mut event_q); },
-									None => { stream.write_all(b"Steal from whom?").unwrap(); }
-								}
-							}
-						"get" =>
-							{
-								let target = tokens.next();
-								match target
-								{
-									Some(target) => { stream.write_all(get_item(uuid,&mut* world,target.to_string()).as_bytes()).unwrap(); },
-									None => { stream.write_all(b"Get what?").unwrap(); }
-								}
-							}
-						"drop" =>
-							{
-								let target = tokens.next();
-								match target
-								{
-									Some(target) => { stream.write_all(drop_item(uuid,&mut* world,target.to_string()).as_bytes()).unwrap(); },
-									None => { stream.write_all(b"Drop what?").unwrap(); }
-								}
-							}
-						"prac" =>
-							{
-								let target = tokens.next();
-								match target
-								{
-									Some(target) => { stream.write_all(practice(uuid,&mut* world,target.to_string()).as_bytes()).unwrap(); },
-									None => { stream.write_all(b"Practice what?").unwrap(); }
-								}
-							}
-						"quit" =>
-							{
-								world.fetch_mobile(uuid);
-								return;
-							}
-						"stats" => { stream.write_all(show_stats(uuid,&mut* world).as_bytes()).unwrap(); }
-						"i" => { stream.write_all(show_inventory(uuid,&mut* world).as_bytes()).unwrap(); }
-						_ =>
-							{
-								stream.write_all(b"What?").unwrap();
-							}
+						ErrorKind::WouldBlock => { 0 },
+						_ => { return; }
 					}
 				}
-			}
-		}
-		// Run a tick
-		loop
+			Ok(m) => { if m == 0 { return; } m }
+		};
+		buf.truncate(n);
+		input.extend_from_slice(&buf);
+		let end = input.last();
+		match end
 		{
-			match now.elapsed()
-			{
-				Ok(elapsed) =>
-					{
-						if elapsed.as_millis() > TICK.into()
-						{
-							let mut world = world_obj.lock().unwrap();
-							event_q.tick(&mut *world);
-							// After the events, make sure we are alive
-							if check_if_dead(uuid,&mut world,&mut stream,last_msg_read_time) { return; }
-							now = SystemTime::now();
-							break;
-						}
-					} 
-				_ => { now = SystemTime::now(); break; }
-			}
+			Some(end) => if *end == b'\n' { has_input = true; },
+			_ => { () }
 		}
-		// Display any messages in the global message list
 		{
+			// Lock the world
 			let mut world = world_obj.lock().unwrap();
+			// Got the lock, make sure we are alive before processing a command
+			if check_if_dead(uuid,&mut world,&mut stream,last_message_list_read_time) { return; }
+			// Process commands
+			if has_input
+			{
+				// Got the input
+				has_input = false;
+				print_prompt = true;
+				last_output_char = '\n';
+				{
+					// Process the input
+					let input_string = String::from_utf8_lossy(&input);
+					let clean_input_string = input_string.trim();
+					let tokens = clean_input_string.split_whitespace();
+					for word in tokens
+					{
+						command.push_back(word.to_string());
+					}
+					let mut event_q = event_q_obj.lock().unwrap();
+					message_for_user = process_command(&mut command, uuid, &mut world, &mut event_q);
+					}
+				command.clear();
+				input.clear();
+			}
+			// Display any messages in the global message list
 			// Got the lock, make sure we are alive
-			if check_if_dead(uuid,&mut world,&mut stream,last_msg_read_time) { return; }
+			if check_if_dead(uuid,&mut world,&mut stream,last_message_list_read_time) { return; }
 			let position = world.find_mobile_location(uuid).unwrap();
-			last_msg_read = world.message_list.read(position.0,position.1,uuid,last_msg_read_time);
-			last_msg_read_time = SystemTime::now();
+			message_for_user += &world.message_list.read(position.0,position.1,uuid,last_message_list_read_time);
+			last_message_list_read_time = SystemTime::now();
 		}
-		if !last_msg_read.is_empty()
+		if !message_for_user.is_empty()
 		{
 			print_prompt = true;
-			stream.write_all(b"\n").unwrap();
-			stream.write_all(last_msg_read.as_bytes()).unwrap();
+			if last_output_char != '\n'
+			{
+				stream.write_all(b"\n").unwrap();
+			}
+			last_output_char = message_for_user.chars().last().unwrap();
+			stream.write_all(message_for_user.as_bytes()).unwrap();
 			stream.flush().unwrap();
+			message_for_user.clear();
 		}
 	}
 }
 
 // Automatic events that run in the background
-fn background_events(world_obj: Arc<Mutex<WorldState> >)
+fn background_events(world_obj: Arc<Mutex<WorldState> >, event_q_obj: Arc<Mutex<EventList> >)
 {
 	let tick_duration = Duration::from_millis(TICK.into());
-	let mut event_q = EventList::new();
-	// Default events
-	let wandering_monsters = Box::new(WanderingMonsterEvent::new());
-	event_q.insert(wandering_monsters);
-	let age_event = Box::new(AgeEvent::new());
-	event_q.insert(age_event);
+	{
+		let mut event_q = event_q_obj.lock().unwrap();
+		// Default events
+		let wandering_monsters = Box::new(WanderingMonsterEvent::new());
+		event_q.insert(wandering_monsters);
+		let age_event = Box::new(AgeEvent::new());
+		event_q.insert(age_event);
+	}
 	// Run the event loop
 	loop
 	{
 		thread::sleep(tick_duration);
 		{
+			let mut event_q = event_q_obj.lock().unwrap();
 			let mut world = world_obj.lock().unwrap();
 			event_q.tick(&mut *world);
 		}
@@ -428,12 +420,14 @@ fn background_events(world_obj: Arc<Mutex<WorldState> >)
 fn main()
 {
 	let world_obj = Arc::new(Mutex::new(WorldState::new()));
+	let event_q_obj = Arc::new(Mutex::new(EventList::new()));
 	// Start the background thread
 	{
 		let world_obj = Arc::clone(&world_obj);
-		thread::spawn(move ||
+		let event_q_obj = Arc::clone(&event_q_obj);
+		thread::spawn(||
 			{
-				background_events(world_obj);
+				background_events(world_obj,event_q_obj);
 			}
 		);
 	}
@@ -443,9 +437,10 @@ fn main()
 	{
 		let stream = stream.unwrap();
 		let world_obj = Arc::clone(&world_obj);
-		thread::spawn(move ||
+		let event_q_obj = Arc::clone(&event_q_obj);
+		thread::spawn(||
 			{
-				handle_connection(stream,world_obj);
+				handle_connection(stream,world_obj,event_q_obj);
 			}
 		);
 	}

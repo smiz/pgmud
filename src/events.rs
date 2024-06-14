@@ -9,6 +9,7 @@ use crate::message::*;
 use rand::random;
 use uuid::Uuid;
 
+
 pub trait Event
 {
 	// Execute the event.
@@ -17,8 +18,8 @@ pub trait Event
 
 pub struct EventList
 {
-	even_event_queue: LinkedList<Box<dyn Event> >,
-	odd_event_queue: LinkedList<Box<dyn Event> >,
+	even_event_queue: LinkedList<Box<dyn Event+Send> >,
+	odd_event_queue: LinkedList<Box<dyn Event+Send> >,
 	is_odd: bool
 }
 
@@ -34,7 +35,7 @@ impl EventList
 				};
 	}
 
-	pub fn insert(&mut self, event: Box<dyn Event>)
+	pub fn insert(&mut self, event: Box<dyn Event+Send>)
 	{
 		if self.is_odd
 		{
@@ -249,6 +250,10 @@ impl LocationVisitor for WanderingMonsterLocationVisitor
 {
 	fn visit_location(&mut self, location: &mut Box<Location>, _messages: &mut MessageList)
 	{
+		if location.num_mobiles() > 3
+		{
+			return;
+		}
 		match location.location_type
 		{
 			LocationTypeCode::Forest => 
@@ -269,6 +274,7 @@ impl LocationVisitor for WanderingMonsterLocationVisitor
 						_ => { return; }
 					}
 				}
+			_ => { return; }
 		}
 	}
 }

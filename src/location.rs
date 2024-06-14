@@ -6,11 +6,12 @@ use crate::items::*;
 use crate::message::*;
 use uuid::Uuid;
 
-#[derive(Copy,Clone)]
+#[derive(Copy,Clone,Eq,PartialEq)]
 pub enum LocationTypeCode
 {
 	Town,
 	Forest,
+	Unexplored
 }
 
 // A location on the map
@@ -54,6 +55,12 @@ impl Object for Location
 
 impl Location
 {
+
+	pub fn num_mobiles(&self) -> usize
+	{
+		return self.mobiles.len();
+	}
+
 	pub fn new(x: i16, y: i16, code: LocationTypeCode,
 		description: String) -> Location
 	{
