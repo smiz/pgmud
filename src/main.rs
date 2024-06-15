@@ -47,12 +47,12 @@ fn check_if_dead(uuid: Uuid, world: &mut WorldState, stream: &mut TcpStream, las
 	}
 }
 
-fn get_item(uuid: Uuid, world: &mut WorldState, target: String) -> String
+fn get_item(uuid: Uuid, world: &mut WorldState, target: &String) -> String
 {
 	let mut result = "Got it!".to_string();
 	let position = world.find_mobile_location(uuid).unwrap();
 	let mut mobile = world.fetch_mobile(uuid).unwrap();
-	let item = world.fetch_item_by_name(position.0,position.1,&target);
+	let item = world.fetch_item_by_name(position.0,position.1,target);
 	if item.is_some()
 	{
 		let item = item.unwrap();
@@ -74,7 +74,7 @@ fn get_item(uuid: Uuid, world: &mut WorldState, target: String) -> String
 	return result;
 }
 
-fn practice(uuid: Uuid, world: &mut WorldState, skill: String) -> String
+fn practice(uuid: Uuid, world: &mut WorldState, skill: &String) -> String
 {
 	let mut found_skill = true;
 	let mut success = false;
@@ -92,6 +92,10 @@ fn practice(uuid: Uuid, world: &mut WorldState, skill: String) -> String
 	{
 		success = mobile.practice_perception();
 	}
+	else if skill == "knowledge"
+	{
+		success = mobile.practice_knowledge();
+	}
 	else
 	{
 		found_skill = false; 
@@ -108,12 +112,12 @@ fn practice(uuid: Uuid, world: &mut WorldState, skill: String) -> String
 	return "You have improved at ".to_string()+&skill+"!";
 }
 
-fn drop_item(uuid: Uuid, world: &mut WorldState, target: String) -> String
+fn drop_item(uuid: Uuid, world: &mut WorldState, target: &String) -> String
 {
 	let mut result = "Dropped it!".to_string();
 	let position = world.find_mobile_location(uuid).unwrap();
 	let mut mobile = world.fetch_mobile(uuid).unwrap();
-	let item = mobile.fetch_item_by_name(target);
+	let item = mobile.fetch_item_by_name(&target);
 	if item.is_some()
 	{
 		world.add_item(position.0,position.1,item.unwrap());
@@ -122,6 +126,15 @@ fn drop_item(uuid: Uuid, world: &mut WorldState, target: String) -> String
 	{
 		result = "Drop what?".to_string();
 	}
+	world.add_mobile(mobile,position.0,position.1);
+	return result;
+}
+
+fn eat_item(uuid: Uuid, world: &mut WorldState, target: &String) -> String
+{
+	let position = world.find_mobile_location(uuid).unwrap();
+	let mut mobile = world.fetch_mobile(uuid).unwrap();
+	let result = mobile.eat_item_by_name(target);
 	world.add_mobile(mobile,position.0,position.1);
 	return result;
 }
@@ -196,6 +209,41 @@ fn show_inventory(uuid: Uuid, world: &mut WorldState) -> String
 	return ("You have:\n".to_owned()+&inventory).to_string();
 }
 
+fn show_stats_of(uuid: Uuid, world: &mut WorldState, target: &String) -> String
+{
+	let position = world.find_mobile_location(uuid).unwrap();
+	let scholar = world.fetch_mobile(uuid).unwrap();
+	// Is this a mobile at our location?
+	let mobile = world.fetch_mobile_by_name(position.0,position.1,&target);
+	if mobile.is_some()
+	{
+		let mobile = mobile.unwrap();
+		let success = scholar.roll_knowledge() > mobile.frequency;
+		let description =
+			if !success { "Perhaps you should study harder?".to_string() } 
+			else { mobile.complete_description() };
+		world.add_mobile(mobile,position.0,position.1);
+		world.add_mobile(scholar,position.0,position.1);
+		return description;
+	}
+	// Is this an item at our location?
+	let item = world.fetch_item_by_name(position.0,position.1,&target);
+	if item.is_some()
+	{
+		let item = item.unwrap();
+		let success = scholar.roll_knowledge() > item.frequency;
+		let description =
+			if !success { "Perhaps you should study harder?".to_string() } 
+			else { item.complete_description() };
+		world.add_item(position.0,position.1,item);
+		world.add_mobile(scholar,position.0,position.1);
+		return description;
+	}
+	// Nope. Nothing to stat.
+	world.add_mobile(scholar,position.0,position.1);
+	return "Stat what?".to_string();	
+}
+
 fn show_stats(uuid: Uuid, world: &mut WorldState) -> String
 {
 	let position = world.find_mobile_location(uuid).unwrap();
@@ -227,6 +275,15 @@ fn process_command(command: &mut LinkedList<String>, uuid: Uuid, world: &mut Wor
 		"w" => { goto(uuid,-1,0,event_q); return String::new(); }
 		"n" => { goto(uuid,0,1,event_q); return String::new(); } 
 		"s" => { goto(uuid,0,-1,event_q); return String::new(); }
+		"eat" =>
+			{
+				let target = command.pop_front();
+				match target.as_ref()
+				{
+					Some(target) => { return eat_item(uuid,world,target); },
+					None => { return "Eat what?".to_string(); }
+				}
+			},
 		"look" =>
 			{
 				let target = command.pop_front();
@@ -259,7 +316,7 @@ fn process_command(command: &mut LinkedList<String>, uuid: Uuid, world: &mut Wor
 				let target = command.pop_front();
 				match target.as_ref()
 				{
-					Some(target) => { return get_item(uuid,world,target.to_string()); },
+					Some(target) => { return get_item(uuid,world,target); },
 					None => { return "Get what?".to_string(); }
 				}
 			},
@@ -268,7 +325,7 @@ fn process_command(command: &mut LinkedList<String>, uuid: Uuid, world: &mut Wor
 				let target = command.pop_front();
 				match target.as_ref()
 				{
-					Some(target) => { return drop_item(uuid,world,target.to_string()); },
+					Some(target) => { return drop_item(uuid,world,target); },
 					None => { return "Drop what?".to_string(); }
 				}
 			},
@@ -277,7 +334,7 @@ fn process_command(command: &mut LinkedList<String>, uuid: Uuid, world: &mut Wor
 				let target = command.pop_front();
 				match target.as_ref()
 				{
-					Some(target) => { return practice(uuid,world,target.to_string()); },
+					Some(target) => { return practice(uuid,world,target); },
 					None => { return "Practice what?".to_string(); }
 				}
 			},
@@ -285,9 +342,17 @@ fn process_command(command: &mut LinkedList<String>, uuid: Uuid, world: &mut Wor
 			{
 				world.fetch_mobile(uuid);
 				return "Goodbye!".to_string();
-			}
-		"stats" => { return show_stats(uuid,world); }
-		"i" => { return show_inventory(uuid,world); }
+			},
+		"stat" =>
+			{
+				let target = command.pop_front();
+				match target.as_ref()
+				{
+					Some(target) => { return show_stats_of(uuid,world,target); },
+					None => { return show_stats(uuid,world); }
+				}
+			},
+		"i" => { return show_inventory(uuid,world); },
 		_ =>
 			{
 				return "What?".to_string();

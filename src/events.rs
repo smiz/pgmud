@@ -287,12 +287,9 @@ impl WanderingMonsterLocationVisitor
 		match pick
 		{
 			0 => { return Some(Mobile::rodent()); },
-			1 => { return Some(Mobile::rodent()); },
-			2 => { return Some(Mobile::rodent()); },
-			3 => { return Some(Mobile::rodent()); },
-			4 => { return Some(Mobile::rodent()); },
 			5 => { return Some(Mobile::rabbit()); },
 			6 => { return Some(Mobile::goblin()); },
+			7 => { return Some(Mobile::small_woodland_creature()); },
 			_ => { return None; }
 		}
 	}

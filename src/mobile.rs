@@ -33,6 +33,7 @@ pub struct Mobile
 	pub combat: i16,
 	pub steal: i16,
 	pub perception: i16,
+	pub knowledge: i16,
 	// Description of the object we are using as a weapon
 	pub wielded: String,
 	// Damage done by our attack
@@ -41,7 +42,9 @@ pub struct Mobile
 	inventory: Vec<Box<Item > >,
 	// Maximum miscellaneous that can be carried
 	pub misc_items_slots: u8,
-	pub is_armed: bool
+	pub is_armed: bool,
+	// Target for knowledge rolls
+	pub frequency: i16,
 }
 
 impl Object for Mobile
@@ -63,6 +66,7 @@ impl Object for Mobile
 		result += &("combat: ".to_string()+&(self.combat.to_string())+"\n");
 		result += &("steal: ".to_string()+&(self.steal.to_string())+"\n");
 		result += &("perception: ".to_string()+&(self.perception.to_string())+"\n");
+		result += &("knowledge: ".to_string()+&(self.knowledge.to_string())+"\n");
 		result += &("misc. slots: ".to_string()+&(self.misc_items_slots).to_string()+"\n");
 		result += &("armed: ".to_string()+&(self.is_armed).to_string()+"\n");
 		return result;
@@ -117,6 +121,18 @@ impl Mobile
 		return false;
 	}
 
+	pub fn practice_knowledge(&mut self) -> bool
+	{
+		let cost = self.xp_cost(self.knowledge);
+		if cost > 0
+		{
+			self.xp -= cost;
+			self.knowledge += 1;
+			return true;
+		}
+		return false;
+	}
+
 	pub fn practice_steal(&mut self) -> bool
 	{
 		let cost = self.xp_cost(self.steal);
@@ -140,7 +156,7 @@ impl Mobile
 		let mut result = String::new();
 		for item in self.inventory.iter()
 		{
-			result += &item.description();
+			result += &item.get_name();
 			result += "\n";
 		}
 		return result;
@@ -180,6 +196,11 @@ impl Mobile
 	pub fn roll_steal(&self) -> i16
 	{
 		return self.roll_skill(self.dexterity,self.steal);
+	}
+
+	pub fn roll_knowledge(&self) -> i16
+	{
+		return self.roll_skill(self.intelligence,self.knowledge);
 	}
 
 	pub fn roll_perception(&self) -> i16
@@ -249,7 +270,28 @@ impl Mobile
 		}
 	}
 
-	pub fn fetch_item_by_name(&mut self, key: String) -> Option<Box<Item> >
+	pub fn eat_item_by_name(&mut self, key: &String) -> String
+	{
+		let item = self.fetch_item_by_name(key);
+		match item
+		{
+			Some(mut item) =>
+				{
+					if item.eat(self)
+					{
+						return "You eat the ".to_owned()+&item.get_name();
+					}
+					else
+					{
+						self.add_item(item,false);
+						return "You cannot eat that!".to_string();
+					}
+				},
+			None => { return "Eat what?".to_string(); }
+		}	
+	}
+
+	pub fn fetch_item_by_name(&mut self, key: &String) -> Option<Box<Item> >
 	{
 		let mut i = 0;
 		let mut lower_case_key = key.clone();
@@ -258,7 +300,7 @@ impl Mobile
 		{
 			let mut name = self.inventory[i].name.clone();
 			name.make_ascii_lowercase();
-    		if name.contains(&key)
+    		if name.contains(key)
 			{
 				return self.fetch_item_by_position(i);
 			}
@@ -312,6 +354,7 @@ impl Mobile
 				combat: 0,
 				steal: 0,
 				perception: 0,
+				knowledge: 0,
 				damage: 0,	
 				actions_per_tick: 1,
 				actions_used: 0,
@@ -319,8 +362,50 @@ impl Mobile
 				damage_dice: Dice { number: 1, die: 2 },
 				inventory: Vec::new(),
 				misc_items_slots: 10,
-				is_armed: false
+				is_armed: false,
+				frequency: 1000,
 			});
+	}
+
+	pub fn small_woodland_creature() -> Box<Mobile>
+	{
+		let die = Dice { number: 1, die: 4 };
+		let mut mobile = Box::new(
+			Mobile {
+				id: Uuid::new_v4(),
+				name: "woodland creature".to_string(),
+				description: "A small woodland creature plays happily in the forest.".to_string(),
+				arrive_prefix: "A woodland creature scurries in".to_string(),
+				leave_prefix: "A woodland creature scurries away".to_string(),
+				strength: die.roll(),
+				dexterity: 18,
+				constitution: 18,
+				max_damage: die.roll(),
+				intelligence: die.roll(),
+				wisdom: 1,
+				charisma: die.roll(),
+				luck: die.roll(),
+				xp: 0,
+				combat: 0,
+				damage: 0,
+				steal: 0,
+				perception: 10+die.roll(),
+				knowledge: 0,
+				actions_per_tick: 1,
+				actions_used: 0,
+				wielded: "bite".to_string(),
+				damage_dice: Dice { number: 1, die: 2 },
+				inventory: Vec::new(),
+				misc_items_slots: 1,
+				is_armed: true,
+				frequency: 50,
+			});
+		let treasure = Item::woodland_trinket();
+		if treasure.is_some()
+		{	
+			mobile.add_item(treasure.unwrap(),false); 
+		}	
+		return mobile;
 	}
 
 	pub fn rodent() -> Box<Mobile>
@@ -345,17 +430,20 @@ impl Mobile
 				damage: 0,
 				steal: 0,
 				perception: 10,
+				knowledge: 0,
 				actions_per_tick: 1,
 				actions_used: 0,
 				wielded: "bite".to_string(),
 				damage_dice: Dice { number: 1, die: 1 },
 				inventory: Vec::new(),
 				misc_items_slots: 1,
-				is_armed: true
+				is_armed: true,
+				frequency: 50,
 			});
 		mobile.add_item(Item::healthy_nuts_and_seeds(),false);
 		return mobile;
 	}
+
 	pub fn rabbit() -> Box<Mobile>
 	{
 		let mut mobile = Box::new(
@@ -378,13 +466,15 @@ impl Mobile
 				damage: 0,
 				steal: 0,
 				perception: 10,
+				knowledge: 0,
 				actions_per_tick: 1,
 				actions_used: 0,
 				wielded: "bite".to_string(),
 				damage_dice: Dice { number: 1, die: 1 },
 				inventory: Vec::new(),
 				misc_items_slots: 1,
-				is_armed: true
+				is_armed: true,
+				frequency: 50,
 			});
 		mobile.add_item(Item::rabbit_foot(),false);
 		return mobile;
@@ -412,13 +502,15 @@ impl Mobile
 				xp: 0,
 				steal: 0,
 				perception: 1,
+				knowledge: 0,
 				actions_per_tick: 1,
 				actions_used: 0,
 				wielded: "fist".to_string(),
 				damage_dice: Dice { number: 1, die: 2 },
 				inventory: Vec::new(),
 				misc_items_slots: 1,
-				is_armed: false
+				is_armed: false,
+				frequency: 50,
 			});
 		mobile.add_item(Item::green_penny(),false);
 		return mobile;
@@ -446,13 +538,15 @@ impl Mobile
 				xp: 0,
 				steal: 0,
 				perception: 1,
+				knowledge: 0,
 				actions_per_tick: 1,
 				actions_used: 0,
 				wielded: "fist".to_string(),
 				damage_dice: Dice { number: 1, die: 2 },
 				inventory: Vec::new(),
 				misc_items_slots: 1,
-				is_armed: false
+				is_armed: false,
+				frequency: 100,
 			});
 		let weapon = Item::pointed_stick();
 		mobile.add_item(weapon,false);
@@ -481,13 +575,15 @@ impl Mobile
 				xp: 0,
 				steal: 0,
 				perception: 0,
+				knowledge: 0,
 				actions_per_tick: 1,
 				actions_used: 0,
 				wielded: "fist".to_string(),
 				damage_dice: Dice { number: 1, die: 2 },
 				inventory: Vec::new(),
 				misc_items_slots: 1,
-				is_armed: false
+				is_armed: false,
+				frequency: 50,
 			});
 		let weapon = Item::sword();
 		mobile.add_item(weapon,false);
