@@ -6,6 +6,8 @@ use crate::location::LocationTypeCode;
 use crate::mobile::Mobile;
 use crate::object::Object;
 use crate::message::*;
+use crate::dice::*;
+use crate::items::*;
 use rand::random;
 use uuid::Uuid;
 
@@ -116,14 +118,15 @@ impl Event for CombatEvent
 					b.damage += a.damage_dice.roll();
 					if b.damage > b.max_hit_points()
 					{
-						world.message_list.broadcast(a.name.clone()+" slays "+&b.name+"!",a_position.0,a_position.1);	
-						world.message_list.post_for_target("You have been slain by ".to_string()+&a.name+"!",b.get_id());
+						world.message_list.broadcast(a.name_with_article.clone()+" slays "+&b.name_with_article+"!",a_position.0,a_position.1);	
+						world.message_list.post_for_target("You have been slain by ".to_string()+&a.name_with_article+"!",b.get_id());
 						world.add_mobile(a,a_position.0,a_position.1);
+						b.is_killed();
 						world.add_corpse(&mut b,b_position.0,b_position.1);
 					}
 					else
 					{
-						world.message_list.broadcast(a.name.clone()+" wounds "+&b.name+" with a "+&a.wielded+"!",a_position.0,a_position.1);	
+						world.message_list.broadcast(a.name_with_article.clone()+" wounds "+&b.name_with_article+" with a "+&a.wielded+"!",a_position.0,a_position.1);	
 						world.add_mobile(a,a_position.0,a_position.1);
 						world.add_mobile(b,b_position.0,b_position.1);
 						event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
@@ -134,14 +137,15 @@ impl Event for CombatEvent
 					a.damage += b.damage_dice.roll();
 					if a.damage > a.max_hit_points()
 					{
-						world.message_list.broadcast(b.name.clone()+" slays "+&a.name+"!",a_position.0,a_position.1);	
-						world.message_list.post_for_target("You have been slain by ".to_string()+&b.name+"!",a.get_id());
+						world.message_list.broadcast(b.name_with_article.clone()+" slays "+&a.name_with_article+"!",a_position.0,a_position.1);	
+						world.message_list.post_for_target("You have been slain by ".to_string()+&b.name_with_article+"!",a.get_id());
 						world.add_mobile(b,b_position.0,b_position.1);
+						a.is_killed();
 						world.add_corpse(&mut a,a_position.0,a_position.1);
 					}
 					else
 					{
-						world.message_list.broadcast(b.name.clone()+" wounds "+&a.name+" with a "+&b.wielded+"!",a_position.0,a_position.1);	
+						world.message_list.broadcast(b.name_with_article.clone()+" wounds "+&a.name_with_article+" with a "+&b.wielded+"!",a_position.0,a_position.1);	
 						world.add_mobile(a,a_position.0,a_position.1);
 						world.add_mobile(b,b_position.0,b_position.1);
 						event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
@@ -149,14 +153,14 @@ impl Event for CombatEvent
 				}
 				else if outcome
 				{
-					world.message_list.broadcast(b.name.clone()+" repulses "+&a.name+"!",a_position.0,a_position.1);	
+					world.message_list.broadcast(b.name_with_article.clone()+" repulses "+&a.name_with_article+"!",a_position.0,a_position.1);	
 					world.add_mobile(a,a_position.0,a_position.1);
 					world.add_mobile(b,b_position.0,b_position.1);
 					event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
 				}
 				else
 				{
-					world.message_list.broadcast(a.name.clone()+" repulses "+&b.name+"!",a_position.0,a_position.1);	
+					world.message_list.broadcast(a.name_with_article.clone()+" repulses "+&b.name_with_article+"!",a_position.0,a_position.1);	
 					world.add_mobile(a,a_position.0,a_position.1);
 					world.add_mobile(b,b_position.0,b_position.1);
 					event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
@@ -465,3 +469,50 @@ impl Event for StealEvent
 		}
 	}
 }
+
+// Make some rawhide from corpses
+pub struct MakeRawhideEvent
+{
+	pub maker: Uuid,
+}
+
+impl Event for MakeRawhideEvent
+{
+	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
+	{
+		let mut successes = 0;
+		let die = Dice { number: 1, die: 100 };
+		let position = world.find_mobile_location(self.maker);
+		if position.is_none()
+		{
+			return;
+		}
+		let position = position.unwrap();
+		let mut mobile = world.fetch_mobile(self.maker).unwrap();
+		// Reschedule if we don't have an action
+		if !mobile.use_action()
+		{
+			event_q.insert(Box::new(MakeRawhideEvent { maker: self.maker }));
+		}
+		else
+		{
+			// Find and transform each corpse
+			loop
+			{
+				let corpse = mobile.fetch_item_by_name(&"corpse".to_string());
+				if corpse.is_none()
+				{
+					break;
+				}
+				if mobile.roll_leatherwork() > 50+die.roll()
+				{
+					successes += 1;
+					mobile.add_item(Item::rawhide(),false);
+				}
+			}
+			world.message_list.broadcast(mobile.name_with_article.clone()+&" makes ".to_string()+&successes.to_string()+
+				&" pieces of rawhide!".to_string(),position.0,position.1);	
+		}
+		world.add_mobile(mobile,position.0,position.1);
+	}
+}	

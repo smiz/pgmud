@@ -28,10 +28,10 @@ const TICK : u16 = 250;
 // messages, getting input, and so forth
 const SUB_TICK : u16 = 50;
 
-// If we are dead, then exit. Otherwise return our position
-fn check_if_dead(uuid: Uuid, world: &mut WorldState, stream: &mut TcpStream, last_msg_read_time: SystemTime) -> bool
+// If we are removed, then exit. Otherwise return our position
+fn check_if_removed(uuid: Uuid, world: &mut WorldState, stream: &mut TcpStream, last_msg_read_time: SystemTime) -> bool
 {
-	if world.mobile_exists(uuid)
+	if world.mobile_active(uuid)
 	{
 		return false;
 	}
@@ -74,6 +74,19 @@ fn get_item(uuid: Uuid, world: &mut WorldState, target: &String) -> String
 	return result;
 }
 
+fn make_item(uuid: Uuid, event_q: &mut EventList, target: &String) -> String
+{
+	match target.as_ref()
+	{
+		"rawhide" =>
+			{
+				event_q.insert(Box::new(MakeRawhideEvent { maker: uuid }));
+				return "You begin making rawhide".to_string();
+			}
+		_ => { return "What is ".to_string()+target+&"?".to_string(); }
+	}
+}
+
 fn practice(uuid: Uuid, world: &mut WorldState, skill: &String) -> String
 {
 	let mut found_skill = true;
@@ -95,6 +108,10 @@ fn practice(uuid: Uuid, world: &mut WorldState, skill: &String) -> String
 	else if skill == "knowledge"
 	{
 		success = mobile.practice_knowledge();
+	}
+	else if skill == "leatherwork"
+	{
+		success = mobile.practice_leatherwork();
 	}
 	else
 	{
@@ -253,13 +270,62 @@ fn show_stats(uuid: Uuid, world: &mut WorldState) -> String
 	return result;
 }
 
-fn load_character(world_obj: Arc<Mutex<WorldState> >) -> Uuid
+fn load_character(world_obj: Arc<Mutex<WorldState> >, mut stream: &TcpStream) -> Option<Uuid>
 {
-	let character = Mobile::new_character("Lord Jim".to_string());
-	let uuid = character.get_id();
-	let mut world = world_obj.lock().unwrap();
-	world.add_mobile(character,0,0);
-	return uuid;	
+	let mut result = None;
+	stream.write_all(b"Welcome!\n").unwrap();
+	stream.flush().unwrap();
+	stream.write_all(b"What is your name? ").unwrap();
+	stream.flush().unwrap();
+	let mut buf = vec![0;128];
+	let n = match stream.read(&mut buf)
+	{
+		Err(_e) => { return None; },
+		Ok(m) => { m }
+	};
+	if n == 0 { return None; }
+	buf.truncate(n);
+	let line = String::from_utf8_lossy(&buf);
+	let name = line.trim();
+	loop
+	{
+		let mut character = Mobile::new_character(&name.to_string());
+		{
+			let mut world = world_obj.lock().unwrap();
+			if character.load_from_file()
+			{
+				let uuid = character.get_id();
+				if !world.mobile_exists(uuid)
+				{
+					world.add_mobile(character,0,0);
+				}
+				result = Some(uuid);
+				break;
+			}
+		}
+		stream.write_all(character.complete_description().as_bytes()).unwrap();
+		stream.write_all(b"Keep this character (y/n)? ").unwrap();
+		stream.flush().unwrap();
+		let mut buf = vec![0;128];
+		let n = match stream.read(&mut buf)
+		{
+			Err(_e) => { break; },
+			Ok(m) => { m }
+		};
+		if n == 0 { break; }
+		buf.truncate(n);
+		let line = String::from_utf8_lossy(&buf);
+		let clean_line = line.trim();
+		if clean_line.contains(&"y")
+		{
+			let id = character.get_id();
+			let mut world = world_obj.lock().unwrap();
+			world.add_mobile(character,0,0);
+			result = Some(id);
+			break;
+		}
+	}
+	return result;
 }
 
 fn process_command(command: &mut LinkedList<String>, uuid: Uuid, world: &mut WorldState, event_q: &mut EventList) -> String
@@ -340,7 +406,7 @@ fn process_command(command: &mut LinkedList<String>, uuid: Uuid, world: &mut Wor
 			},
 		"quit" =>
 			{
-				world.fetch_mobile(uuid);
+				world.stash_mobile(uuid);
 				return "Goodbye!".to_string();
 			},
 		"stat" =>
@@ -353,6 +419,15 @@ fn process_command(command: &mut LinkedList<String>, uuid: Uuid, world: &mut Wor
 				}
 			},
 		"i" => { return show_inventory(uuid,world); },
+		"make" =>
+			{
+				let target = command.pop_front();
+				match target.as_ref()
+				{
+					Some(target) => { return make_item(uuid,event_q,target); },
+					None => { return "Make what?".to_string(); }
+				}
+			},
 		_ =>
 			{
 				return "What?".to_string();
@@ -368,12 +443,15 @@ fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >, 
 	let mut _now = SystemTime::now();
 	let mut last_message_list_read_time = SystemTime::now();
 	let mut message_for_user = String::new();
-	let uuid = load_character(world_obj.clone());
+	let uuid = 
+		match load_character(world_obj.clone(),&stream)
+		{
+			Some(uuid) => { uuid },
+			None => { return; }
+		};
 	let mut input: Vec<u8> = vec![];
 	let _ = stream.set_read_timeout(Some(Duration::from_millis(SUB_TICK.into())));
 	let mut last_output_char = '\n';
-	stream.write_all(b"Welcome!\n").unwrap();
-	stream.flush().unwrap();
 	loop
 	{
 		let mut has_input = false;
@@ -413,7 +491,7 @@ fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >, 
 			// Lock the world
 			let mut world = world_obj.lock().unwrap();
 			// Got the lock, make sure we are alive before processing a command
-			if check_if_dead(uuid,&mut world,&mut stream,last_message_list_read_time) { return; }
+			if check_if_removed(uuid,&mut world,&mut stream,last_message_list_read_time) { return; }
 			// Process commands
 			if has_input
 			{
@@ -438,8 +516,11 @@ fn handle_connection(mut stream: TcpStream, world_obj: Arc<Mutex<WorldState> >, 
 			}
 			// Display any messages in the global message list
 			// Got the lock, make sure we are alive
-			if check_if_dead(uuid,&mut world,&mut stream,last_message_list_read_time) { return; }
+			if check_if_removed(uuid,&mut world,&mut stream,last_message_list_read_time) { return; }
 			let position = world.find_mobile_location(uuid).unwrap();
+			let mobile = world.fetch_mobile(uuid).unwrap();
+			mobile.save_to_file();
+			world.add_mobile(mobile,position.0,position.1);	
 			message_for_user += &world.message_list.read(position.0,position.1,uuid,last_message_list_read_time);
 			last_message_list_read_time = SystemTime::now();
 		}

@@ -11,7 +11,8 @@ pub enum ItemTypeCode
 	ForestDebris,
 	Corpse,
 	Sword,
-	PointedStick
+	PointedStick,
+	Rawhide,
 }
 
 #[derive(Copy,Clone)]
@@ -110,6 +111,22 @@ impl Item
 				effect: "The clay left behind when the spirit is fled.".to_string(),
 				frequency: 50,
 				type_code: ItemTypeCode::Corpse,
+				category_code: ItemCategoryCode::Misc,
+				xp_value: 0,
+				lifetime: 100,
+			});
+	}
+
+	pub fn rawhide() -> Box<Item>
+	{
+		return Box::new(
+			Item
+			{
+				description: "A bit of rawhide is here.".to_string(),
+				name: "rawhide".to_string(),
+				effect: "This can be made into many useful items.".to_string(),
+				frequency: 25,
+				type_code: ItemTypeCode::Rawhide,
 				category_code: ItemCategoryCode::Misc,
 				xp_value: 0,
 				lifetime: 100,
@@ -231,7 +248,7 @@ mod items_unit_test
 	fn add_rabbit_foot_test()
 	{
 		let foot = Item::rabbit_foot();
-		let mut mobile = Mobile::new_character("Jim".to_string());
+		let mut mobile = Mobile::new_character(&"Jim".to_string());
 		let luck = mobile.luck;
 		mobile.add_item(foot,true);
 		assert_eq!(luck+1,mobile.luck);
@@ -244,7 +261,7 @@ mod items_unit_test
 	fn eat_test()
 	{
 		let nuts = Item::healthy_nuts_and_seeds();
-		let mut mobile = Mobile::new_character("Jim".to_string());
+		let mut mobile = Mobile::new_character(&"Jim".to_string());
 		let damage = mobile.damage;
 		mobile.add_item(nuts,true);
 		mobile.eat_item_by_name(&"nut".to_string());

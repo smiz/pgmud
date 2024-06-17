@@ -9,6 +9,7 @@ pub struct Mobile
 	id: Uuid,
 	pub description: String,
 	pub name: String,
+	pub name_with_article: String,
 	// Arrival signified by message {arrive_prefix} from the {direction}
 	pub arrive_prefix: String,
 	// Leaving signified by message {leave_prefix} to the {direction}
@@ -33,13 +34,14 @@ pub struct Mobile
 	pub combat: i16,
 	pub steal: i16,
 	pub perception: i16,
+	pub leatherwork: i16,
 	pub knowledge: i16,
 	// Description of the object we are using as a weapon
 	pub wielded: String,
 	// Damage done by our attack
 	pub damage_dice: Dice,
 	// Inventory
-	inventory: Vec<Box<Item > >,
+	pub inventory: Vec<Box<Item > >,
 	// Maximum miscellaneous that can be carried
 	pub misc_items_slots: u8,
 	pub is_armed: bool,
@@ -59,13 +61,13 @@ impl Object for Mobile
 		result += &(", int: ".to_string()+&(self.intelligence.to_string()));
 		result += &(", wis: ".to_string()+&(self.wisdom.to_string()));
 		result += &(", chr: ".to_string()+&(self.charisma.to_string()));
-		result += &(", luck: ".to_string()+&(self.luck.to_string()));
 		result += &(", xp: ".to_string()+&(self.xp.to_string()));
 		result += &(", dmg: ".to_string()+&(self.damage.to_string())+&"/".to_string()+&(self.max_hit_points().to_string()));
 		result += "\n";
 		result += &("combat: ".to_string()+&(self.combat.to_string())+"\n");
 		result += &("steal: ".to_string()+&(self.steal.to_string())+"\n");
 		result += &("perception: ".to_string()+&(self.perception.to_string())+"\n");
+		result += &("leatherwork: ".to_string()+&(self.leatherwork.to_string())+"\n");
 		result += &("knowledge: ".to_string()+&(self.knowledge.to_string())+"\n");
 		result += &("misc. slots: ".to_string()+&(self.misc_items_slots).to_string()+"\n");
 		result += &("armed: ".to_string()+&(self.is_armed).to_string()+"\n");
@@ -86,6 +88,84 @@ impl Object for Mobile
 
 impl Mobile
 {
+
+	pub fn load_from_file(&mut self) -> bool 
+	{
+		let mut file_name = self.name.clone()+&".csv".to_string();
+		file_name.make_ascii_lowercase();
+    	let result = csv::Reader::from_path(file_name);
+		match result
+		{
+			Ok(mut reader) => 
+				{
+					for item in reader.records()
+					{
+						match item
+						{
+							Ok(item) => 
+								{
+									let key = item.get(0).unwrap();
+									let value = item.get(1).unwrap();
+									match key.as_ref()
+									{
+										"str" => { self.strength = value.parse::<i16>().unwrap(); },
+										"int" => { self.intelligence = value.parse::<i16>().unwrap(); },
+										"wis" => { self.wisdom = value.parse::<i16>().unwrap(); },
+										"dex" => { self.dexterity = value.parse::<i16>().unwrap(); },
+										"con" => { self.constitution = value.parse::<i16>().unwrap(); },
+										"chr" => { self.charisma = value.parse::<i16>().unwrap(); },
+										"xp" => { self.xp = value.parse::<i16>().unwrap(); },
+										"hp" => { self.max_damage = value.parse::<i16>().unwrap(); },
+										"combat" => { self.combat = value.parse::<i16>().unwrap(); },
+										"steal" => { self.steal = value.parse::<i16>().unwrap(); },
+										"knowledge" => { self.knowledge = value.parse::<i16>().unwrap(); },
+										"perception" => { self.perception = value.parse::<i16>().unwrap(); },
+										"leatherwork" => { self.leatherwork = value.parse::<i16>().unwrap(); },
+										"id" => { self.id = value.parse::<Uuid>().unwrap(); },
+										_ => { () }
+									}
+								},
+							_ => { return false; }
+						}
+					}
+				},
+			_ => { return false; }
+		}
+		return true;
+	}
+
+	pub fn save_to_file(&self)
+	{
+		let mut file_name = self.name.clone()+&".csv".to_string();
+		file_name.make_ascii_lowercase();
+		let mut wtr = csv::Writer::from_path(file_name).unwrap();
+		let _ = wtr.write_record(&["name",&self.name]).unwrap();
+		let _ = wtr.write_record(&["id",&self.id.to_string()]).unwrap();
+		let _ = wtr.write_record(&["str",&self.strength.to_string()]).unwrap();
+		let _ = wtr.write_record(&["dex",&self.dexterity.to_string()]).unwrap();
+		let _ = wtr.write_record(&["con",&self.constitution.to_string()]).unwrap();
+		let _ = wtr.write_record(&["chr",&self.charisma.to_string()]).unwrap();
+		let _ = wtr.write_record(&["int",&self.intelligence.to_string()]).unwrap();
+		let _ = wtr.write_record(&["wis",&self.wisdom.to_string()]).unwrap();
+		let _ = wtr.write_record(&["xp",&self.xp.to_string()]).unwrap();
+		let _ = wtr.write_record(&["dmg",&self.damage.to_string()]).unwrap();
+		let _ = wtr.write_record(&["hp",&self.max_hit_points().to_string()]).unwrap();
+		let _ = wtr.write_record(&["combat",&self.combat.to_string()]).unwrap();
+		let _ = wtr.write_record(&["steal",&self.steal.to_string()]).unwrap();
+		let _ = wtr.write_record(&["perception",&self.perception.to_string()]).unwrap();
+		let _ = wtr.write_record(&["leatherwork",&self.leatherwork.to_string()]).unwrap();
+		let _ = wtr.write_record(&["knowledge",&self.knowledge.to_string()]).unwrap();
+		let _ = wtr.flush().unwrap();
+	}
+
+	pub fn is_killed(&self)
+	{
+		let mut old_file_name = self.name.clone()+&".csv".to_string();
+		old_file_name.make_ascii_lowercase();
+		let mut new_file_name = self.name.clone()+&".dead".to_string();
+		new_file_name.make_ascii_lowercase();
+		let _ignore_result = std::fs::rename(old_file_name,new_file_name);
+	}
 
 	fn xp_cost(&self, skill_level: i16) -> i16
 	{
@@ -116,6 +196,18 @@ impl Mobile
 		{
 			self.xp -= cost;
 			self.perception += 1;
+			return true;
+		}
+		return false;
+	}
+
+	pub fn practice_leatherwork(&mut self) -> bool
+	{
+		let cost = self.xp_cost(self.leatherwork);
+		if cost > 0
+		{
+			self.xp -= cost;
+			self.leatherwork += 1;
 			return true;
 		}
 		return false;
@@ -206,6 +298,11 @@ impl Mobile
 	pub fn roll_perception(&self) -> i16
 	{
 		return self.roll_skill(self.wisdom,self.perception);
+	}
+
+	pub fn roll_leatherwork(&self) -> i16
+	{
+		return self.roll_skill(self.intelligence,self.leatherwork);
 	}
 
 	pub fn get_id(&self) -> Uuid
@@ -330,30 +427,31 @@ impl Mobile
 		}
 	}
 
-	pub fn new_character(name: String) -> Box<Mobile>
+	/// Construct object with default values
+	fn new(name: &String, article: &String) -> Box<Mobile>
 	{
-		let die = Dice { number: 3, die: 6 };
-		let constitution = die.roll();
 		return Box::new(
 			Mobile
 			{
 				id: Uuid::new_v4(),
 				name: name.clone(),
-				description: name.clone()+" looks relaxed.",
-				arrive_prefix: name.clone()+" arrives",
-				leave_prefix: name+" leaves",
-				strength: die.roll(),
-				dexterity: die.roll(),
-				constitution: constitution,
-				max_damage: constitution,
-				intelligence: die.roll(),
-				wisdom: die.roll(),
-				charisma: die.roll(),
+				name_with_article: article.clone()+&name,
+				description: "You see a ".to_string()+article+" "+name+".",
+				arrive_prefix: article.clone()+" "+name+" arrive",
+				leave_prefix: article.clone()+" "+name+" leaves",
+				strength: 10,
+				dexterity: 10,
+				constitution: 10,
+				max_damage: 10,
+				intelligence: 10,
+				wisdom: 10,
+				charisma: 10,
 				luck: 0,
 				xp: 0,
 				combat: 0,
 				steal: 0,
 				perception: 0,
+				leatherwork: 0,
 				knowledge: 0,
 				damage: 0,	
 				actions_per_tick: 1,
@@ -363,8 +461,26 @@ impl Mobile
 				inventory: Vec::new(),
 				misc_items_slots: 10,
 				is_armed: false,
-				frequency: 1000,
+				frequency: 10000,
 			});
+	}
+
+	pub fn new_character(name: &String) -> Box<Mobile>
+	{
+		let mut character = Mobile::new(name,&"".to_string());
+		let die = Dice { number: 3, die: 6 };
+		character.name = name.clone();
+		character.description = name.clone()+" is here.";
+		character.arrive_prefix = name.clone()+" arrives";
+		character.leave_prefix = name.clone()+" leaves";
+		character.strength = die.roll();
+		character.dexterity = die.roll();
+		character.constitution = die.roll();
+		character.max_damage = character.constitution;
+		character.intelligence = die.roll();
+		character.wisdom = die.roll();
+		character.charisma = die.roll();
+		return character;
 	}
 
 	pub fn small_woodland_creature() -> Box<Mobile>
@@ -374,6 +490,7 @@ impl Mobile
 			Mobile {
 				id: Uuid::new_v4(),
 				name: "woodland creature".to_string(),
+				name_with_article: "the woodland creature".to_string(),
 				description: "A small woodland creature plays happily in the forest.".to_string(),
 				arrive_prefix: "A woodland creature scurries in".to_string(),
 				leave_prefix: "A woodland creature scurries away".to_string(),
@@ -391,6 +508,7 @@ impl Mobile
 				steal: 0,
 				perception: 10+die.roll(),
 				knowledge: 0,
+				leatherwork: 0,
 				actions_per_tick: 1,
 				actions_used: 0,
 				wielded: "bite".to_string(),
@@ -414,6 +532,7 @@ impl Mobile
 			Mobile {
 				id: Uuid::new_v4(),
 				name: "rodent".to_string(),
+				name_with_article: "the rodent".to_string(),
 				description: "A small rodent watches you keenly.".to_string(),
 				arrive_prefix: "A small rodent scurries in".to_string(),
 				leave_prefix: "A small rodent scurries away".to_string(),
@@ -430,6 +549,7 @@ impl Mobile
 				damage: 0,
 				steal: 0,
 				perception: 10,
+				leatherwork: 0,
 				knowledge: 0,
 				actions_per_tick: 1,
 				actions_used: 0,
@@ -450,6 +570,7 @@ impl Mobile
 			Mobile {
 				id: Uuid::new_v4(),
 				name: "rabbit".to_string(),
+				name_with_article: "the rabbit".to_string(),
 				description: "A rabbit watches you carefully.".to_string(),
 				arrive_prefix: "A rabbit hops ".to_string(),
 				leave_prefix: "A rabbit hops in from the".to_string(),
@@ -466,6 +587,7 @@ impl Mobile
 				damage: 0,
 				steal: 0,
 				perception: 10,
+				leatherwork: 0,
 				knowledge: 0,
 				actions_per_tick: 1,
 				actions_used: 0,
@@ -486,6 +608,7 @@ impl Mobile
 			Mobile {
 				id: Uuid::new_v4(),
 				name: "beggar".to_string(),
+				name_with_article: "the beggar".to_string(),
 				description: "A beggar is asking for alms.".to_string(),
 				arrive_prefix: "A beggar arrives".to_string(),
 				leave_prefix: "A beggar leaves".to_string(),
@@ -502,6 +625,7 @@ impl Mobile
 				xp: 0,
 				steal: 0,
 				perception: 1,
+				leatherwork: 0,
 				knowledge: 0,
 				actions_per_tick: 1,
 				actions_used: 0,
@@ -522,6 +646,7 @@ impl Mobile
 			Mobile {
 				id: Uuid::new_v4(),
 				name: "goblin".to_string(),
+				name_with_article: "the goblin".to_string(),
 				description: "A goblin menaces you with his stick.".to_string(),
 				arrive_prefix: "A goblin arrives".to_string(),
 				leave_prefix: "A goblin leaves".to_string(),
@@ -538,6 +663,7 @@ impl Mobile
 				xp: 0,
 				steal: 0,
 				perception: 1,
+				leatherwork: 0,
 				knowledge: 0,
 				actions_per_tick: 1,
 				actions_used: 0,
@@ -559,6 +685,7 @@ impl Mobile
 			Mobile {
 				id: Uuid::new_v4(),
 				name: "foppish dandy".to_string(),
+				name_with_article: "the dandy".to_string(),
 				description: "A foppish dandy looks at you disdainfully.".to_string(),
 				arrive_prefix: "A foppish dandy arrives".to_string(),
 				leave_prefix: "A foppish dandy leaves".to_string(),
@@ -575,6 +702,7 @@ impl Mobile
 				xp: 0,
 				steal: 0,
 				perception: 0,
+				leatherwork: 0,
 				knowledge: 0,
 				actions_per_tick: 1,
 				actions_used: 0,
@@ -601,7 +729,7 @@ mod mobile_unit_test
 	fn test_slots()
 	{
 		let mut foot = Item::rabbit_foot();
-		let mut mobile = Mobile::new_character("Jim".to_string());
+		let mut mobile = Mobile::new_character(&"Jim".to_string());
 		while mobile.has_room_for_item(&foot)
 		{
 			mobile.add_item(foot,true);
@@ -610,4 +738,27 @@ mod mobile_unit_test
 		mobile.fetch_item_by_position(0);
 		assert!(mobile.has_room_for_item(&foot));
 	}
+
+	#[test]
+	fn save_load_mobile()
+	{
+		let c1 = Mobile::new_character(&"Lord Jim".to_string());
+		c1.save_to_file();
+		let mut c2 = Mobile::new_character(&"Lord Jim".to_string());
+		assert!(c2.load_from_file());
+		assert_eq!(c1.strength,c2.strength);
+		assert_eq!(c1.intelligence,c2.intelligence);
+		assert_eq!(c1.wisdom,c2.wisdom);
+		assert_eq!(c1.constitution,c2.constitution);
+		assert_eq!(c1.charisma,c2.charisma);
+		assert_eq!(c1.dexterity,c2.dexterity);
+		assert_eq!(c1.combat,c2.combat);
+		assert_eq!(c1.steal,c2.steal);
+		assert_eq!(c1.knowledge,c2.knowledge);
+		assert_eq!(c1.perception,c2.perception);
+		assert_eq!(c1.leatherwork,c2.leatherwork);
+		let mut c3 = Mobile::new_character(&"Lord Tom".to_string());
+		assert!(!c3.load_from_file());
+	}
+
 }
