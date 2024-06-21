@@ -71,19 +71,38 @@ impl Map
 
 	fn make_new_location(&mut self, x: i16, y: i16) -> Box<Location>
 	{
-		let dice = Dice { number: 1, die: 10 };
-		let _forest_count = self.count_adjacent(x,y,LocationTypeCode::Forest);
+		let forest_count = self.count_adjacent(x,y,LocationTypeCode::Forest);
+		let _deep_wood_count = self.count_adjacent(x,y,LocationTypeCode::DeepWoods);
 		let town_count = self.count_adjacent(x,y,LocationTypeCode::Town);
-		let unexplored_count = self.count_adjacent(x,y,LocationTypeCode::Unexplored);
-		if town_count > 0 || unexplored_count > 1 || dice.roll() < 10
+		let _unexplored_count = self.count_adjacent(x,y,LocationTypeCode::Unexplored);
+		// A safe corridors always connect towns
+		if forest_count == 1 || town_count == 1
 		{
-			return Box::new(
-				Location::new(x,y,LocationTypeCode::Forest,"In the forest".to_string()));
+			let dice = Dice { number: 1, die: 20 };
+			// Towns are never adjacent
+			if town_count == 0 && dice.roll() == 1
+			{
+				return Box::new(Location::new(x,y,LocationTypeCode::Town,"A small town".to_string()));
+			}
+			else
+			{
+				return Box::new(Location::new(x,y,LocationTypeCode::Forest,"In the forest".to_string()));
+			}
 		}
+		// Grow a mix of forest and deep, dangerous woods
 		else
 		{
-			return Box::new(
-				Location::new(x,y,LocationTypeCode::Town,"A small town".to_string()));
+			let dice = Dice { number: 1, die: 20 };
+			if dice.roll() == 1
+			{
+				return Box::new(
+					Location::new(x,y,LocationTypeCode::Town,"In the forest".to_string()));
+			}
+			else
+			{
+				return Box::new(
+					Location::new(x,y,LocationTypeCode::DeepWoods,"In the deep woods".to_string()));
+			}
 		}
 	}
 

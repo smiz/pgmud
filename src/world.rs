@@ -1,3 +1,4 @@
+use crate::location::*;
 use crate::message::MessageList;
 use crate::map::*;
 use crate::mobile::*;
@@ -127,6 +128,14 @@ impl WorldState
 	{
 		let location = self.map.fetch(x,y);
 		let result = location.description();
+		self.map.replace(location);
+		return result;
+	}
+
+	pub fn get_location_type(&mut self, x: i16, y: i16) -> LocationTypeCode
+	{
+		let location = self.map.fetch(x,y);
+		let result = location.location_type;
 		self.map.replace(location);
 		return result;
 	}

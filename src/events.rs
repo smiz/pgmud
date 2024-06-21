@@ -115,7 +115,7 @@ impl Event for CombatEvent
 				let outcome = a.roll_combat() >= b.roll_combat();
 				if outcome && a_has_actions
 				{
-					b.damage += a.damage_dice.roll();
+					b.do_damage(a.damage_dice.roll());
 					if b.damage > b.max_hit_points()
 					{
 						world.message_list.broadcast(a.name_with_article.clone()+" slays "+&b.name_with_article+"!",a_position.0,a_position.1);	
@@ -134,7 +134,7 @@ impl Event for CombatEvent
 				}
 				else if !outcome && b_has_actions
 				{
-					a.damage += b.damage_dice.roll();
+					a.do_damage(b.damage_dice.roll());
 					if a.damage > a.max_hit_points()
 					{
 						world.message_list.broadcast(b.name_with_article.clone()+" slays "+&a.name_with_article+"!",a_position.0,a_position.1);	
@@ -243,6 +243,49 @@ impl Event for MoveMobileEvent
 	}
 }
 
+
+// Mobile wanders about the terrain on its own, but sticks to the
+// terrain where it was created
+pub struct MoveMonsterEvent
+{
+	pub id: Uuid,
+}
+
+impl Event for MoveMonsterEvent
+{
+	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
+	{
+		let xy = world.find_mobile_location(self.id);
+		match xy
+		{
+			None => { return; }
+			Some(xy) => 
+				{
+					let mobile = world.fetch_mobile(self.id).unwrap();
+					let current_location_type = world.get_location_type(xy.0,xy.1);
+					let die = Dice { number: 1 , die: 100 };
+					let direction = match die.roll()
+					{
+						1 => { (1,0) },
+						2 => { (-1,0) },
+						3 => { (0,-1) },
+						4 => { (0,1) },
+						_ => { (0,0) }
+					};
+					let next_location_type = world.get_location_type(xy.0+direction.0,xy.1+direction.1);
+					if xy != (0,0) && next_location_type == current_location_type
+					{
+						event_q.insert(Box::new(MoveMobileEvent{ uuid: mobile.get_id(), dx: direction.0, dy: direction.1 }));
+					}
+					if mobile.wanders
+					{
+						event_q.insert(Box::new(MoveMonsterEvent { id: mobile.get_id() }));
+					}
+					world.add_mobile(mobile,xy.0,xy.1);
+				}
+		}
+	}
+}
 // Create wandering monsters
 
 pub struct WanderingMonsterLocationVisitor
@@ -268,10 +311,19 @@ impl LocationVisitor for WanderingMonsterLocationVisitor
 						Some(monster) => { self.monster_list.push_back((location.x,location.y,monster)); },
 						_ => { return; }
 					}
-				}
+				},
 			LocationTypeCode::Town => 
 				{
 					let monster = self.town_wandering_monster();
+					match monster
+					{
+						Some(monster) => { self.monster_list.push_back((location.x,location.y,monster)); },
+						_ => { return; }
+					}
+				},
+			LocationTypeCode::DeepWoods => 
+				{
+					let monster = self.deep_woods_wandering_monster();
 					match monster
 					{
 						Some(monster) => { self.monster_list.push_back((location.x,location.y,monster)); },
@@ -285,15 +337,26 @@ impl LocationVisitor for WanderingMonsterLocationVisitor
 
 impl WanderingMonsterLocationVisitor
 {
+
+	fn deep_woods_wandering_monster(&self) -> Option<Box<Mobile> >
+	{
+		let pick = random::<u8>();
+		match pick
+		{
+			6 => { return Some(Mobile::goblin()); },
+			_ => { return None; }
+		}
+	}
+
 	fn forest_wandering_monster(&self) -> Option<Box<Mobile> >
 	{
 		let pick = random::<u8>();
 		match pick
 		{
 			0 => { return Some(Mobile::rodent()); },
-			5 => { return Some(Mobile::rabbit()); },
-			6 => { return Some(Mobile::goblin()); },
-			7 => { return Some(Mobile::small_woodland_creature()); },
+			1 => { return Some(Mobile::lumber_jack()); },
+			2 => { return Some(Mobile::rabbit()); },
+			3 => { return Some(Mobile::small_woodland_creature()); },
 			_ => { return None; }
 		}
 	}
@@ -304,12 +367,7 @@ impl WanderingMonsterLocationVisitor
 		match pick
 		{
 			0 => { return Some(Mobile::beggar()); },
-			1 => { return Some(Mobile::beggar()); },
-			2 => { return Some(Mobile::beggar()); },
-			3 => { return Some(Mobile::beggar()); },
-			4 => { return Some(Mobile::beggar()); },
-			5 => { return Some(Mobile::beggar()); },
-			6 => { return Some(Mobile::foppish_dandy()); },
+			1 => { return Some(Mobile::foppish_dandy()); },
 			_ => { return None; }
 		}
 	}
@@ -330,6 +388,10 @@ impl Event for WanderingMonsterEvent
 			let name = item.2.get_name();
 			let msg = "A ".to_owned()+&name+" has arrived.";
 			world.message_list.broadcast(msg,item.0,item.1);
+			if item.2.wanders
+			{
+				event_q.insert(Box::new(MoveMonsterEvent { id: item.2.get_id() }));
+			}
 			world.add_mobile(item.2,item.0,item.1);
 		}
 		let next_event = Box::new(WanderingMonsterEvent::new());
@@ -515,4 +577,57 @@ impl Event for MakeRawhideEvent
 		}
 		world.add_mobile(mobile,position.0,position.1);
 	}
-}	
+}
+
+// Make armor from rawhide
+pub struct MakeLeatherArmorEvent
+{
+	pub maker: Uuid,
+}
+
+impl Event for MakeLeatherArmorEvent
+{
+	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
+	{
+		let mut material = 0;
+		let die = Dice { number: 1, die: 100 };
+		let position = world.find_mobile_location(self.maker);
+		if position.is_none()
+		{
+			return;
+		}
+		let position = position.unwrap();
+		let mut mobile = world.fetch_mobile(self.maker).unwrap();
+		// Reschedule if we don't have an action
+		if !mobile.use_action()
+		{
+			event_q.insert(Box::new(MakeLeatherArmorEvent { maker: self.maker }));
+		}
+		else
+		{
+			// Find and transform each rawhide item
+			loop
+			{
+				let rawhide = mobile.fetch_item_by_name(&"rawhide".to_string());
+				if rawhide.is_none()
+				{
+					break;
+				}
+				material += 1;
+			}
+			if material > 0 && mobile.roll_leatherwork() > 25+10*material+die.roll()
+			{
+				world.message_list.broadcast(mobile.name_with_article.clone()+&" makes some leather armor".to_string(),position.0,position.1);
+				let mut armor = Item::leather_armor();
+				armor.armor_value = material;
+				world.add_item(position.0,position.1,armor);
+			}
+			else
+			{
+				world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins ".to_string()+&material.to_string()+
+					&" pieces of rawhide!".to_string(),position.0,position.1);	
+			}
+		}
+		world.add_mobile(mobile,position.0,position.1);
+	}
+}

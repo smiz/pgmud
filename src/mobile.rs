@@ -40,13 +40,20 @@ pub struct Mobile
 	pub wielded: String,
 	// Damage done by our attack
 	pub damage_dice: Dice,
+	// How much armor protection do we have?,
+	pub armor: i16,
 	// Inventory
 	pub inventory: Vec<Box<Item > >,
 	// Maximum miscellaneous that can be carried
 	pub misc_items_slots: u8,
+	// Has a weapon?
 	pub is_armed: bool,
+	// Wearing armor?
+	pub is_armored: bool,
 	// Target for knowledge rolls
 	pub frequency: i16,
+	// Does this mobile wander about of its own accord?
+	pub wanders: bool
 }
 
 impl Object for Mobile
@@ -71,6 +78,7 @@ impl Object for Mobile
 		result += &("knowledge: ".to_string()+&(self.knowledge.to_string())+"\n");
 		result += &("misc. slots: ".to_string()+&(self.misc_items_slots).to_string()+"\n");
 		result += &("armed: ".to_string()+&(self.is_armed).to_string()+"\n");
+		result += &("armor protection: ".to_string()+&(self.armor).to_string()+"\n");
 		return result;
 	}
 
@@ -156,6 +164,22 @@ impl Mobile
 		let _ = wtr.write_record(&["leatherwork",&self.leatherwork.to_string()]).unwrap();
 		let _ = wtr.write_record(&["knowledge",&self.knowledge.to_string()]).unwrap();
 		let _ = wtr.flush().unwrap();
+	}
+
+	pub fn do_damage(&mut self, damage: i16)
+	{
+		let mut damage_applied = damage;
+		if damage >= self.armor
+		{
+			damage_applied -= self.armor;
+			self.armor = 0;
+		}
+		else
+		{
+			damage_applied = 0;
+			self.armor -= damage;
+		}
+		self.damage += damage_applied;
 	}
 
 	pub fn is_killed(&self)
@@ -341,14 +365,9 @@ impl Mobile
 		return self.fetch_item_by_position(index);
 	}
 
-	pub fn fetch_last_item(&mut self) -> Option<Box<Item> >
+	pub fn fetch_first_item(&mut self) -> Option<Box<Item> >
 	{
-		let item_ptr = self.inventory.pop();
-		match item_ptr
-		{
-			Some(ref item) => { item.drop_item(self); return item_ptr; }
-			_ => { return None; }
-		}
+		return self.fetch_item_by_position(0);
 	}
 
 	pub fn fetch_item_by_position(&mut self, pos: usize) -> Option<Box<Item> >
@@ -357,14 +376,18 @@ impl Mobile
 		{
 			return None;
 		}
-		let item = self.inventory.remove(pos);
+		let mut item = self.inventory.remove(pos);
 		let slot_code = item.category_code.clone();
 		item.drop_item(self);
-		match slot_code
 		{
-			ItemCategoryCode::Misc => { self.misc_items_slots += 1; return Some(item); },
-			ItemCategoryCode::Weapon => { self.is_armed = false; return Some(item); },
+			match slot_code
+			{
+				ItemCategoryCode::Misc => { self.misc_items_slots += 1; },
+				ItemCategoryCode::Weapon => { self.is_armed = false; self.unwield(); },
+				ItemCategoryCode::Armor => { item.armor_value = self.armor; self.armor = 0; self.is_armored = false; },
+			}
 		}
+		return Some(item);
 	}
 
 	pub fn eat_item_by_name(&mut self, key: &String) -> String
@@ -412,6 +435,7 @@ impl Mobile
 		{
 			ItemCategoryCode::Misc => { return self.misc_items_slots > 0; },
 			ItemCategoryCode::Weapon => { return !self.is_armed; },
+			ItemCategoryCode::Armor => { return !self.is_armored; },
 		}
 	}
 
@@ -419,15 +443,18 @@ impl Mobile
 	{
 		let slot_code = item.category_code.clone();
 		item.got_item(self,take_xp);
-		self.inventory.push(item);
-		match slot_code
 		{
-			ItemCategoryCode::Misc => { self.misc_items_slots -= 1; },
-			ItemCategoryCode::Weapon => { self.is_armed = true; },
+			match slot_code
+			{
+				ItemCategoryCode::Misc => { self.misc_items_slots -= 1; },
+				ItemCategoryCode::Weapon => { self.is_armed = true; },
+				ItemCategoryCode::Armor => { self.is_armored = true; self.armor = item.armor_value; },
+			}
 		}
+		self.inventory.push(item);
 	}
 
-	/// Construct object with default values
+	/// Construct mobile with default values
 	fn new(name: &String, article: &String) -> Box<Mobile>
 	{
 		return Box::new(
@@ -436,7 +463,7 @@ impl Mobile
 				id: Uuid::new_v4(),
 				name: name.clone(),
 				name_with_article: article.clone()+&name,
-				description: "You see a ".to_string()+article+" "+name+".",
+				description: "You see ".to_string()+article+" "+name+".",
 				arrive_prefix: article.clone()+" "+name+" arrive",
 				leave_prefix: article.clone()+" "+name+" leaves",
 				strength: 10,
@@ -461,7 +488,10 @@ impl Mobile
 				inventory: Vec::new(),
 				misc_items_slots: 10,
 				is_armed: false,
+				is_armored: false,
 				frequency: 10000,
+				armor: 0,
+				wanders: false
 			});
 	}
 
@@ -486,38 +516,23 @@ impl Mobile
 	pub fn small_woodland_creature() -> Box<Mobile>
 	{
 		let die = Dice { number: 1, die: 4 };
-		let mut mobile = Box::new(
-			Mobile {
-				id: Uuid::new_v4(),
-				name: "woodland creature".to_string(),
-				name_with_article: "the woodland creature".to_string(),
-				description: "A small woodland creature plays happily in the forest.".to_string(),
-				arrive_prefix: "A woodland creature scurries in".to_string(),
-				leave_prefix: "A woodland creature scurries away".to_string(),
-				strength: die.roll(),
-				dexterity: 18,
-				constitution: 18,
-				max_damage: die.roll(),
-				intelligence: die.roll(),
-				wisdom: 1,
-				charisma: die.roll(),
-				luck: die.roll(),
-				xp: 0,
-				combat: 0,
-				damage: 0,
-				steal: 0,
-				perception: 10+die.roll(),
-				knowledge: 0,
-				leatherwork: 0,
-				actions_per_tick: 1,
-				actions_used: 0,
-				wielded: "bite".to_string(),
-				damage_dice: Dice { number: 1, die: 2 },
-				inventory: Vec::new(),
-				misc_items_slots: 1,
-				is_armed: true,
-				frequency: 50,
-			});
+		let mut mobile = Mobile::new(&"woodland creature".to_string(),&"a".to_string());
+		mobile.description = "A small woodland creature plays happily in the forest.".to_string();
+		mobile.arrive_prefix = "A woodland creature scurries in".to_string();
+		mobile.leave_prefix = "A woodland creature scurries away".to_string();
+		mobile.strength = die.roll();
+		mobile.dexterity = 18;
+		mobile.constitution = 18;
+		mobile.max_damage = die.roll();
+		mobile.intelligence = die.roll();
+		mobile.wisdom = 1;
+		mobile.charisma = die.roll();
+		mobile.luck = die.roll();
+		mobile.perception = 10+die.roll();
+		mobile.wielded = "bite".to_string();
+		mobile.damage_dice = Dice { number: 1, die: 2 };
+		mobile.is_armed = true;
+		mobile.frequency = 50;
 		let treasure = Item::woodland_trinket();
 		if treasure.is_some()
 		{	
@@ -528,38 +543,22 @@ impl Mobile
 
 	pub fn rodent() -> Box<Mobile>
 	{
-		let mut mobile = Box::new(
-			Mobile {
-				id: Uuid::new_v4(),
-				name: "rodent".to_string(),
-				name_with_article: "the rodent".to_string(),
-				description: "A small rodent watches you keenly.".to_string(),
-				arrive_prefix: "A small rodent scurries in".to_string(),
-				leave_prefix: "A small rodent scurries away".to_string(),
-				strength: 1,
-				dexterity: 18,
-				constitution: 3,
-				max_damage: 3,
-				intelligence: 2,
-				wisdom: 1,
-				charisma: 3,
-				luck: 0,
-				xp: 0,
-				combat: 0,
-				damage: 0,
-				steal: 0,
-				perception: 10,
-				leatherwork: 0,
-				knowledge: 0,
-				actions_per_tick: 1,
-				actions_used: 0,
-				wielded: "bite".to_string(),
-				damage_dice: Dice { number: 1, die: 1 },
-				inventory: Vec::new(),
-				misc_items_slots: 1,
-				is_armed: true,
-				frequency: 50,
-			});
+		let mut mobile = Mobile::new(&"rodent".to_string(),&"a".to_string());
+		mobile.description = "A small rodent watches you keenly.".to_string();
+		mobile.arrive_prefix = "A small rodent scurries in".to_string();
+		mobile.leave_prefix = "A small rodent scurries away".to_string();
+		mobile.strength = 1;
+		mobile.dexterity = 18;
+		mobile.constitution = 18;
+		mobile.max_damage = 3;
+		mobile.intelligence = 2;
+		mobile.wisdom = 1;
+		mobile.charisma = 3;
+		mobile.perception = 10;
+		mobile.wielded = "bite".to_string();
+		mobile.damage_dice = Dice { number: 1, die: 1 };
+		mobile.is_armed = true;
+		mobile.frequency = 50;
 		mobile.add_item(Item::healthy_nuts_and_seeds(),false);
 		return mobile;
 	}
@@ -572,8 +571,8 @@ impl Mobile
 				name: "rabbit".to_string(),
 				name_with_article: "the rabbit".to_string(),
 				description: "A rabbit watches you carefully.".to_string(),
-				arrive_prefix: "A rabbit hops ".to_string(),
-				leave_prefix: "A rabbit hops in from the".to_string(),
+				arrive_prefix: "A rabbit hops".to_string(),
+				leave_prefix: "A rabbit hops in from".to_string(),
 				strength: 1,
 				dexterity: 18,
 				constitution: 3,
@@ -596,7 +595,10 @@ impl Mobile
 				inventory: Vec::new(),
 				misc_items_slots: 1,
 				is_armed: true,
+				is_armored: false,
 				frequency: 50,
+				armor: 0,
+				wanders: false
 			});
 		mobile.add_item(Item::rabbit_foot(),false);
 		return mobile;
@@ -634,7 +636,10 @@ impl Mobile
 				inventory: Vec::new(),
 				misc_items_slots: 1,
 				is_armed: false,
+				is_armored: false,
 				frequency: 50,
+				armor: 0,
+				wanders: false
 			});
 		mobile.add_item(Item::green_penny(),false);
 		return mobile;
@@ -672,7 +677,10 @@ impl Mobile
 				inventory: Vec::new(),
 				misc_items_slots: 1,
 				is_armed: false,
+				is_armored: false,
 				frequency: 100,
+				armor: 0,
+				wanders: true
 			});
 		let weapon = Item::pointed_stick();
 		mobile.add_item(weapon,false);
@@ -711,9 +719,26 @@ impl Mobile
 				inventory: Vec::new(),
 				misc_items_slots: 1,
 				is_armed: false,
+				is_armored: false,
 				frequency: 50,
+				armor: 0,
+				wanders: false
 			});
 		let weapon = Item::sword();
+		mobile.add_item(weapon,false);
+		return mobile;
+	}
+
+	pub fn lumber_jack() -> Box<Mobile>	
+	{
+		let mut mobile = Mobile::new_character(&"lumberjack".to_string());
+		mobile.name_with_article = "the ".to_string()+&mobile.name;
+		mobile.description = "A strong lumberjack is looking for a tall tree.".to_string();
+		mobile.arrive_prefix = "A lumberjack strides in from".to_string();
+		mobile.leave_prefix = "A lumberjack strides away".to_string();
+		mobile.strength = 16;
+		mobile.wanders = true;
+		let weapon = Item::axe();
 		mobile.add_item(weapon,false);
 		return mobile;
 	}
@@ -724,6 +749,14 @@ mod mobile_unit_test
 {
 	use super::*;
 	use crate::items::*;
+
+	#[test]
+	fn test_fetch_first_item()
+	{
+		let mut mobile = Mobile::new_character(&"Jim".to_string());
+		let result1 = mobile.fetch_first_item();
+		assert!(result1.is_none());
+	}
 
 	#[test]
 	fn test_slots()
@@ -760,5 +793,4 @@ mod mobile_unit_test
 		let mut c3 = Mobile::new_character(&"Lord Tom".to_string());
 		assert!(!c3.load_from_file());
 	}
-
 }

@@ -11,6 +11,7 @@ pub enum LocationTypeCode
 {
 	Town,
 	Forest,
+	DeepWoods,
 	Unexplored
 }
 
@@ -94,7 +95,7 @@ impl Location
 		self.add_item(Item::corpse(mobile.name.clone()));
 		loop
 		{
-			let item = mobile.fetch_last_item();
+			let item = mobile.fetch_first_item();
 			if item.is_some()
 			{
 				self.add_item(item.unwrap());

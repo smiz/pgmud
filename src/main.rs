@@ -83,6 +83,11 @@ fn make_item(uuid: Uuid, event_q: &mut EventList, target: &String) -> String
 				event_q.insert(Box::new(MakeRawhideEvent { maker: uuid }));
 				return "You begin making rawhide".to_string();
 			}
+		"leatheramor" =>
+			{
+				event_q.insert(Box::new(MakeLeatherArmorEvent { maker: uuid }));
+				return "You begin making leather armor".to_string();
+			}
 		_ => { return "What is ".to_string()+target+&"?".to_string(); }
 	}
 }

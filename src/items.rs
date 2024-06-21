@@ -11,15 +11,18 @@ pub enum ItemTypeCode
 	ForestDebris,
 	Corpse,
 	Sword,
+	Axe,
 	PointedStick,
 	Rawhide,
+	LeatherArmor,
 }
 
 #[derive(Copy,Clone)]
 pub enum ItemCategoryCode
 {
 	Misc,
-	Weapon
+	Weapon,
+	Armor
 }
 
 pub struct Item
@@ -33,15 +36,26 @@ pub struct Item
 	pub lifetime: u32,
 	// How much xp for getting this item?
 	pub xp_value: i16,
-	// How common is this item
-	pub frequency: i16
+	// How common is this item?
+	pub frequency: i16,
+	// Armor protection provided if this is armor?
+	pub armor_value: i16,
 }
 
 impl Object for Item
 {
 	fn complete_description(&self) -> String
 	{
-		return self.effect.clone();
+		let mut result = self.effect.clone();
+		match self.category_code
+		{
+			ItemCategoryCode::Armor =>
+				{
+					result += &(" Protection is ".to_string()+&self.armor_value.to_string());
+					return result;
+				},
+			_ => { return result; }
+		}
 	}
 
 	fn description(&self) -> String
@@ -80,6 +94,7 @@ impl Item
 			ItemTypeCode::GreenPenny => { mobile.luck += 1; }
 			ItemTypeCode::Sword => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 8}; }
 			ItemTypeCode::PointedStick => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 4}; }
+			ItemTypeCode::Axe => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 8}; }
 			_ => { return; }
 		}
 	}
@@ -90,8 +105,6 @@ impl Item
 		{
 			ItemTypeCode::RabbitFoot => { mobile.luck -= 1; }
 			ItemTypeCode::GreenPenny => { mobile.luck -= 1; }
-			ItemTypeCode::Sword => { mobile.unwield(); }
-			ItemTypeCode::PointedStick => { mobile.unwield(); }
 			_ => { return; }
 		}
 	}
@@ -99,6 +112,23 @@ impl Item
 	pub fn tick(&mut self)
 	{
 		self.lifetime -= 1;
+	}
+
+	pub fn basic_item(type_code: ItemTypeCode, cat_code: ItemCategoryCode) -> Box<Item>
+	{
+		return Box::new(
+			Item
+			{
+				description: "".to_string(),
+				name: "".to_string(),
+				effect: "".to_string(),
+				frequency: 25,
+				type_code: type_code,
+				category_code: cat_code,
+				xp_value: 0,
+				lifetime: 100,
+				armor_value: 0,
+			});
 	}
 
 	pub fn corpse(in_life: String) -> Box<Item>
@@ -114,6 +144,7 @@ impl Item
 				category_code: ItemCategoryCode::Misc,
 				xp_value: 0,
 				lifetime: 100,
+				armor_value: 0,
 			});
 	}
 
@@ -130,7 +161,37 @@ impl Item
 				category_code: ItemCategoryCode::Misc,
 				xp_value: 0,
 				lifetime: 100,
+				armor_value: 0,
 			});
+	}
+
+	pub fn leather_armor() -> Box<Item>
+	{
+		return Box::new(
+			Item
+			{
+				description: "A suit of leather armor is here.".to_string(),
+				name: "leather armor".to_string(),
+				effect: "Will protect you from harm!.".to_string(),
+				frequency: 25,
+				type_code: ItemTypeCode::LeatherArmor,
+				category_code: ItemCategoryCode::Armor,
+				xp_value: 1,
+				lifetime: 1000,
+				armor_value: 10,
+			});
+	}
+
+	pub fn axe() -> Box<Item>
+	{
+		let mut item = Item::basic_item(ItemTypeCode::Axe,ItemCategoryCode::Weapon);
+		item.description = "A gleaming axe is here.".to_string();
+		item.name = "axe".to_string();
+		item.effect = "A sharp axe dealing 1d8 damage.".to_string();
+		item.frequency = 50;
+		item.xp_value = 1;
+		item.lifetime = 1000;
+		return item;
 	}
 
 	pub fn sword() -> Box<Item>
@@ -146,6 +207,7 @@ impl Item
 				category_code: ItemCategoryCode::Weapon,
 				xp_value: 1,
 				lifetime: 1000,
+				armor_value: 0,
 			});
 	}
 
@@ -162,6 +224,7 @@ impl Item
 				category_code: ItemCategoryCode::Weapon,
 				xp_value: 1,
 				lifetime: 100,
+				armor_value: 0,
 			});
 	}
 	pub fn rabbit_foot() -> Box<Item>
@@ -177,6 +240,7 @@ impl Item
 				category_code: ItemCategoryCode::Misc,
 				xp_value: 1,
 				lifetime: 1000,
+				armor_value: 0,
 			});
 	}
 	pub fn green_penny() -> Box<Item>
@@ -192,6 +256,7 @@ impl Item
 				category_code: ItemCategoryCode::Misc,
 				xp_value: 1,
 				lifetime: 10000,
+				armor_value: 0,
 			});
 	}
 	pub fn healthy_nuts_and_seeds() -> Box<Item>
@@ -207,6 +272,7 @@ impl Item
 				category_code: ItemCategoryCode::Misc,
 				xp_value: 1,
 				lifetime: 10000,
+				armor_value: 0,
 			});
 	}
 	pub fn forest_debris() -> Box<Item>
@@ -222,6 +288,7 @@ impl Item
 				category_code: ItemCategoryCode::Misc,
 				xp_value: 0,
 				lifetime: std::u32::MAX,
+				armor_value: 0,
 			});
 	}
 
