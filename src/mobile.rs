@@ -1,12 +1,13 @@
 use crate::object::Object;
 use crate::items::*;
-use uuid::Uuid;
 use crate::dice::*;
+use crate::uid;
+use std::cmp::max;
 
 // A mobile object or creature
 pub struct Mobile
 {
-	id: Uuid,
+	id: usize,
 	pub description: String,
 	pub name: String,
 	pub name_with_article: String,
@@ -35,6 +36,7 @@ pub struct Mobile
 	pub steal: i16,
 	pub perception: i16,
 	pub leatherwork: i16,
+	pub woodcraft: i16,
 	pub knowledge: i16,
 	// Description of the object we are using as a weapon
 	pub wielded: String,
@@ -77,6 +79,7 @@ impl Object for Mobile
 		result += &("steal: ".to_string()+&(self.steal.to_string())+"\n");
 		result += &("perception: ".to_string()+&(self.perception.to_string())+"\n");
 		result += &("leatherwork: ".to_string()+&(self.leatherwork.to_string())+"\n");
+		result += &("woodcraft: ".to_string()+&(self.woodcraft.to_string())+"\n");
 		result += &("knowledge: ".to_string()+&(self.knowledge.to_string())+"\n");
 		result += &("misc. slots: ".to_string()+&(self.misc_items_slots).to_string()+"\n");
 		result += &("armed: ".to_string()+&(self.is_armed).to_string()+"\n");
@@ -131,7 +134,8 @@ impl Mobile
 										"knowledge" => { self.knowledge = value.parse::<i16>().unwrap(); },
 										"perception" => { self.perception = value.parse::<i16>().unwrap(); },
 										"leatherwork" => { self.leatherwork = value.parse::<i16>().unwrap(); },
-										"id" => { self.id = value.parse::<Uuid>().unwrap(); },
+										"woodcraft" => { self.woodcraft = value.parse::<i16>().unwrap(); },
+										"id" => { self.id = value.parse::<usize>().unwrap(); },
 										_ => { () }
 									}
 								},
@@ -164,6 +168,7 @@ impl Mobile
 		let _ = wtr.write_record(&["steal",&self.steal.to_string()]).unwrap();
 		let _ = wtr.write_record(&["perception",&self.perception.to_string()]).unwrap();
 		let _ = wtr.write_record(&["leatherwork",&self.leatherwork.to_string()]).unwrap();
+		let _ = wtr.write_record(&["woodcraft",&self.woodcraft.to_string()]).unwrap();
 		let _ = wtr.write_record(&["knowledge",&self.knowledge.to_string()]).unwrap();
 		let _ = wtr.flush().unwrap();
 	}
@@ -175,7 +180,10 @@ impl Mobile
 		if damage > self.armor
 		{
 			damage_applied -= self.armor;
-			self.armor -= 1;
+			if self.armor > 0
+			{
+				self.armor -= 1;
+			}
 		}
 		// Damage that does not penetrate the armor is stopped completely
 		else
@@ -223,6 +231,18 @@ impl Mobile
 		{
 			self.xp -= cost;
 			self.perception += 1;
+			return true;
+		}
+		return false;
+	}
+
+	pub fn practice_woodcraft(&mut self) -> bool
+	{
+		let cost = self.xp_cost(self.woodcraft);
+		if cost > 0
+		{
+			self.xp -= cost;
+			self.woodcraft += 1;
 			return true;
 		}
 		return false;
@@ -332,7 +352,17 @@ impl Mobile
 		return self.roll_skill(self.intelligence,self.leatherwork);
 	}
 
-	pub fn get_id(&self) -> Uuid
+	pub fn roll_leatherwork_or_woodcraft(&self) -> i16
+	{
+		return self.roll_skill(self.intelligence,max(self.leatherwork,self.woodcraft));
+	}
+
+	pub fn roll_woodcraft(&self) -> i16
+	{
+		return self.roll_skill(self.intelligence,self.woodcraft);
+	}
+
+	pub fn get_id(&self) -> usize
 	{
 		return self.id;
 	}
@@ -469,7 +499,7 @@ impl Mobile
 		return Box::new(
 			Mobile
 			{
-				id: Uuid::new_v4(),
+				id: uid::new(),
 				name: name.clone(),
 				name_with_article: article.clone()+" "+&name,
 				description: "You see ".to_string()+&article+" "+name+".",
@@ -488,6 +518,7 @@ impl Mobile
 				steal: 0,
 				perception: 0,
 				leatherwork: 0,
+				woodcraft: 0,
 				knowledge: 0,
 				damage: 0,	
 				actions_per_tick: 1,
@@ -611,7 +642,6 @@ impl Mobile
 
 	pub fn goblin() -> Box<Mobile>	
 	{
-		let die = Dice { number : 1 , die : 100 };
 		let mut mobile = Mobile::new(&"goblin".to_string());
 		mobile.description = "A goblin is here, looking menacing.".to_string();
 		mobile.wisdom = 3;
@@ -621,9 +651,10 @@ impl Mobile
 		mobile.aggressive = true;
 		let weapon = Item::pointed_stick();
 		mobile.add_item(weapon,false);
-		if die.roll() <= 50
+		let treasure = Item::minor_treasure();
+		if treasure.is_some()
 		{
-			mobile.add_item(Item::bone_jewelry(),false);
+			mobile.add_item(treasure.unwrap(),false);
 		}
 		return mobile;
 	}
@@ -654,6 +685,15 @@ impl Mobile
 		mobile.add_item(weapon,false);
 		return mobile;
 	}
+
+	// Standard difficulty levels
+	pub fn trivial_task() -> i16 { return 5*5; }
+	pub fn easy_task() -> i16 { return 5*10; }
+	pub fn routine_task() -> i16 { return 5*15; }
+	pub fn skilled_task() -> i16 { return 5*20; }
+	pub fn very_skilled_task() -> i16 { return 5*25; }
+	pub fn heroic_task() -> i16 { return 5*30; }
+
 }
 
 #[cfg(test)]
@@ -661,6 +701,30 @@ mod mobile_unit_test
 {
 	use super::*;
 	use crate::items::*;
+
+	#[test]
+	fn damage_test()
+	{
+		let mut mobile = Mobile::new(&"goober".to_string());
+		mobile.armor = 2;
+		mobile.damage = 0;
+		mobile.do_damage(1);
+		assert_eq!(mobile.damage,0);
+		mobile.do_damage(2);
+		assert_eq!(mobile.damage,0);
+		mobile.do_damage(3);
+		assert_eq!(mobile.damage,1);
+		assert_eq!(mobile.armor,1);
+		mobile.do_damage(1);
+		assert_eq!(mobile.damage,1);
+		assert_eq!(mobile.armor,1);
+		mobile.do_damage(2);
+		assert_eq!(mobile.damage,2);
+		assert_eq!(mobile.armor,0);
+		mobile.do_damage(1);
+		assert_eq!(mobile.damage,3);
+		assert_eq!(mobile.armor,0);
+	}
 
 	#[test]
 	fn test_fetch_first_item()
@@ -702,6 +766,7 @@ mod mobile_unit_test
 		assert_eq!(c1.knowledge,c2.knowledge);
 		assert_eq!(c1.perception,c2.perception);
 		assert_eq!(c1.leatherwork,c2.leatherwork);
+		assert_eq!(c1.woodcraft,c2.woodcraft);
 		let mut c3 = Mobile::new_character(&"Lord Tom".to_string());
 		assert!(!c3.load_from_file());
 	}

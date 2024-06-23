@@ -6,8 +6,7 @@ use std::{
 	time::{Duration,SystemTime},
 	collections::LinkedList
 };
-use location::{Location, LocationTypeCode};
-use uuid::Uuid;
+use location::{LocationTypeCode};
 
 mod items;
 mod world;
@@ -31,7 +30,7 @@ const TICK : u16 = 250;
 const SUB_TICK : u16 = 50;
 
 // If we are removed, then exit. Otherwise return our position
-fn check_if_removed(uuid: Uuid, world: &mut WorldState, stream: &mut TcpStream, last_msg_read_time: SystemTime) -> bool
+fn check_if_removed(uuid: usize, world: &mut WorldState, stream: &mut TcpStream, last_msg_read_time: SystemTime) -> bool
 {
 	if world.mobile_active(uuid)
 	{
@@ -49,7 +48,7 @@ fn check_if_removed(uuid: Uuid, world: &mut WorldState, stream: &mut TcpStream, 
 	}
 }
 
-fn get_item(uuid: Uuid, world: &mut WorldState, target: &String) -> String
+fn get_item(uuid: usize, world: &mut WorldState, target: &String) -> String
 {
 	let mut result = "Got it!".to_string();
 	let position = world.find_mobile_location(uuid).unwrap();
@@ -76,7 +75,7 @@ fn get_item(uuid: Uuid, world: &mut WorldState, target: &String) -> String
 	return result;
 }
 
-fn make_item(uuid: Uuid, event_q: &mut EventList, target: &String) -> String
+fn make_item(uuid: usize, event_q: &mut EventList, target: &String) -> String
 {
 	match target.as_ref()
 	{
@@ -84,17 +83,27 @@ fn make_item(uuid: Uuid, event_q: &mut EventList, target: &String) -> String
 			{
 				event_q.insert(Box::new(MakeRawhideEvent { maker: uuid }));
 				return "You begin making rawhide".to_string();
-			}
+			},
 		"leatherarmor" =>
 			{
 				event_q.insert(Box::new(MakeLeatherArmorEvent { maker: uuid }));
 				return "You begin making leather armor".to_string();
+			},
+		"hidearmor" =>
+			{
+				event_q.insert(Box::new(MakeHideArmorEvent { maker: uuid }));
+				return "You begin making hide armor".to_string();
+			}
+		"pointedstick" =>
+			{
+				event_q.insert(Box::new(MakePointedStickEvent { maker: uuid }));
+				return "You begin sharpening a stick".to_string();
 			}
 		_ => { return "What is ".to_string()+target+&"?".to_string(); }
 	}
 }
 
-fn practice(uuid: Uuid, world: &mut WorldState, skill: &String) -> String
+fn practice(uuid: usize, world: &mut WorldState, skill: &String) -> String
 {
 	let mut found_skill = true;
 	let mut success = false;
@@ -120,6 +129,10 @@ fn practice(uuid: Uuid, world: &mut WorldState, skill: &String) -> String
 	{
 		success = mobile.practice_leatherwork();
 	}
+	else if skill == "woodcraft"
+	{
+		success = mobile.practice_woodcraft();
+	}
 	else
 	{
 		found_skill = false; 
@@ -136,7 +149,7 @@ fn practice(uuid: Uuid, world: &mut WorldState, skill: &String) -> String
 	return "You have improved at ".to_string()+&skill+"!";
 }
 
-fn drop_item(uuid: Uuid, world: &mut WorldState, target: &String) -> String
+fn drop_item(uuid: usize, world: &mut WorldState, target: &String) -> String
 {
 	let mut result = "Dropped it!".to_string();
 	let position = world.find_mobile_location(uuid).unwrap();
@@ -163,7 +176,7 @@ fn drop_item(uuid: Uuid, world: &mut WorldState, target: &String) -> String
 	return result;
 }
 
-fn eat_item(uuid: Uuid, world: &mut WorldState, target: &String) -> String
+fn eat_item(uuid: usize, world: &mut WorldState, target: &String) -> String
 {
 	let position = world.find_mobile_location(uuid).unwrap();
 	let mut mobile = world.fetch_mobile(uuid).unwrap();
@@ -172,7 +185,7 @@ fn eat_item(uuid: Uuid, world: &mut WorldState, target: &String) -> String
 	return result;
 }
 
-fn kill(uuid: Uuid, world: &mut WorldState, event_q: &mut EventList, target: &String)
+fn kill(uuid: usize, world: &mut WorldState, event_q: &mut EventList, target: &String)
 {
 	let position = world.find_mobile_location(uuid).unwrap();
 	let defender = world.get_mobile_id_by_name(position.0,position.1,&target);
@@ -183,7 +196,7 @@ fn kill(uuid: Uuid, world: &mut WorldState, event_q: &mut EventList, target: &St
 	}
 }
 
-fn steal(uuid: Uuid, world: &mut WorldState, event_q: &mut EventList, target: &String)
+fn steal(uuid: usize, world: &mut WorldState, event_q: &mut EventList, target: &String)
 {
 	let position = world.find_mobile_location(uuid).unwrap();
 	let mark = world.get_mobile_id_by_name(position.0,position.1,&target);
@@ -194,7 +207,7 @@ fn steal(uuid: Uuid, world: &mut WorldState, event_q: &mut EventList, target: &S
 	}
 }
 
-fn goto(uuid: Uuid, dx: i16, dy: i16, event_q: &mut EventList)
+fn goto(uuid: usize, dx: i16, dy: i16, event_q: &mut EventList)
 {
 	let move_event = Box::new(MoveMobileEvent
 		{
@@ -205,7 +218,7 @@ fn goto(uuid: Uuid, dx: i16, dy: i16, event_q: &mut EventList)
 	event_q.insert(move_event);
 }
 
-fn look_at(uuid: Uuid, world: &mut WorldState, target: &String) -> String
+fn look_at(uuid: usize, world: &mut WorldState, target: &String) -> String
 {
 	let position = world.find_mobile_location(uuid).unwrap();
 	let mobile = world.fetch_mobile_by_name(position.0,position.1,&target);
@@ -227,13 +240,13 @@ fn look_at(uuid: Uuid, world: &mut WorldState, target: &String) -> String
 	return "Look at what?".to_string();	
 }
 
-fn look(uuid: Uuid, world: &mut WorldState) -> String
+fn look(uuid: usize, world: &mut WorldState) -> String
 {
 	let position = world.find_mobile_location(uuid).unwrap();
 	return world.get_location_description(position.0,position.1);
 }
 
-fn show_inventory(uuid: Uuid, world: &mut WorldState) -> String
+fn show_inventory(uuid: usize, world: &mut WorldState) -> String
 {
 	let position = world.find_mobile_location(uuid).unwrap();
 	let mobile = world.fetch_mobile(uuid).unwrap();
@@ -242,7 +255,7 @@ fn show_inventory(uuid: Uuid, world: &mut WorldState) -> String
 	return ("You have:\n".to_owned()+&inventory).to_string();
 }
 
-fn show_stats_of(uuid: Uuid, world: &mut WorldState, target: &String) -> String
+fn show_stats_of(uuid: usize, world: &mut WorldState, target: &String) -> String
 {
 	let position = world.find_mobile_location(uuid).unwrap();
 	let scholar = world.fetch_mobile(uuid).unwrap();
@@ -277,7 +290,7 @@ fn show_stats_of(uuid: Uuid, world: &mut WorldState, target: &String) -> String
 	return "Stat what?".to_string();	
 }
 
-fn show_stats(uuid: Uuid, world: &mut WorldState) -> String
+fn show_stats(uuid: usize, world: &mut WorldState) -> String
 {
 	let position = world.find_mobile_location(uuid).unwrap();
 	let mobile = world.fetch_mobile(uuid).unwrap();
@@ -286,7 +299,7 @@ fn show_stats(uuid: Uuid, world: &mut WorldState) -> String
 	return result;
 }
 
-fn load_character(world_obj: Arc<Mutex<WorldState> >, mut stream: &TcpStream) -> Option<Uuid>
+fn load_character(world_obj: Arc<Mutex<WorldState> >, mut stream: &TcpStream) -> Option<usize>
 {
 	let mut result = None;
 	stream.write_all(b"Welcome!\n").unwrap();
@@ -344,7 +357,7 @@ fn load_character(world_obj: Arc<Mutex<WorldState> >, mut stream: &TcpStream) ->
 	return result;
 }
 
-fn process_command(command: &mut LinkedList<String>, uuid: Uuid, world: &mut WorldState, event_q: &mut EventList) -> String
+fn process_command(command: &mut LinkedList<String>, uuid: usize, world: &mut WorldState, event_q: &mut EventList) -> String
 {
 	if command.is_empty()
 	{

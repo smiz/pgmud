@@ -15,7 +15,9 @@ pub enum ItemTypeCode
 	PointedStick,
 	Rawhide,
 	LeatherArmor,
+	HideArmor,
 	BoneJewelry,
+	GoldBauble,
 }
 
 #[derive(Copy,Clone)]
@@ -96,7 +98,7 @@ impl Item
 			ItemTypeCode::RabbitFoot => { mobile.luck += 1; }
 			ItemTypeCode::GreenPenny => { mobile.luck += 1; }
 			ItemTypeCode::Sword => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 8}; }
-			ItemTypeCode::PointedStick => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 4}; }
+			ItemTypeCode::PointedStick => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 3}; }
 			ItemTypeCode::Axe => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 8}; }
 			_ => { return; }
 		}
@@ -171,6 +173,24 @@ impl Item
 			});
 	}
 
+	pub fn hide_armor() -> Box<Item>
+	{
+		return Box::new(
+			Item
+			{
+				description: "A stinking suit of hide armor is here.".to_string(),
+				name: "hide armor".to_string(),
+				effect: "Will protect you from harm!.".to_string(),
+				frequency: 25,
+				type_code: ItemTypeCode::HideArmor,
+				category_code: ItemCategoryCode::Armor,
+				xp_value: 1,
+				lifetime: 100,
+				armor_value: 2,
+				xp_in_town_only: false,
+			});
+	}
+
 	pub fn leather_armor() -> Box<Item>
 	{
 		return Box::new(
@@ -184,7 +204,7 @@ impl Item
 				category_code: ItemCategoryCode::Armor,
 				xp_value: 1,
 				lifetime: 1000,
-				armor_value: 10,
+				armor_value: 3,
 				xp_in_town_only: false,
 			});
 	}
@@ -317,6 +337,18 @@ impl Item
 		return item;
 	}
 
+	pub fn gold_bauble() -> Box<Item>
+	{
+		let mut item = Item::basic_item(ItemTypeCode::GoldBauble,ItemCategoryCode::Misc);
+		item.description = "A golden bauble shines brightly in the sunlight.".to_string();
+		item.name = "golden bauble".to_string();
+		item.effect = "This may be worth something in town.".to_string();
+		item.frequency = 50;
+		item.xp_value = 5;
+		item.lifetime = 1000;
+		return item;
+	}
+
 	pub fn woodland_trinket() -> Option<Box<Item> >
 	{
 		let die = Dice { number: 1, die: 8 };
@@ -325,6 +357,18 @@ impl Item
 		{
 			1 => { return Some(Self::rabbit_foot()); },
 			2 => { return Some(Self::healthy_nuts_and_seeds()); },
+			_ => { return None; }
+		}
+	}
+
+	pub fn minor_treasure() -> Option<Box<Item> >
+	{
+		let die = Dice { number: 1, die: 8 };
+		let roll = die.roll();
+		match roll
+		{
+			1 => { return Some(Self::gold_bauble()); },
+			2 => { return Some(Self::bone_jewelry()); },
 			_ => { return None; }
 		}
 	}

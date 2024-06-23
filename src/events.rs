@@ -9,8 +9,6 @@ use crate::message::*;
 use crate::dice::*;
 use crate::items::*;
 use rand::random;
-use uuid::Uuid;
-
 
 pub trait Event
 {
@@ -78,8 +76,8 @@ impl EventList
 pub struct CombatEvent
 {
 	// Combatants
-	pub attacker: Uuid,
-	pub defender: Uuid,
+	pub attacker: usize,
+	pub defender: usize,
 }
 
 impl Event for CombatEvent
@@ -186,7 +184,7 @@ impl Event for CombatEvent
 // Move a mobile
 pub struct MoveMobileEvent
 {
-	pub uuid: Uuid,
+	pub uuid: usize,
 	pub dx: i16,
 	pub dy: i16
 }
@@ -249,7 +247,7 @@ impl Event for MoveMobileEvent
 // other actions on its own
 pub struct ActiveMonsterEvent
 {
-	pub id: Uuid,
+	pub id: usize,
 }
 
 impl Event for ActiveMonsterEvent
@@ -324,10 +322,6 @@ impl LocationVisitor for WanderingMonsterLocationVisitor
 {
 	fn visit_location(&mut self, location: &mut Box<Location>, _messages: &mut MessageList)
 	{
-		if location.num_mobiles() > 0
-		{
-			return;
-		}
 		match location.location_type
 		{
 			LocationTypeCode::Forest => 
@@ -408,18 +402,21 @@ impl Event for WanderingMonsterEvent
 {
 	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
 	{
-		let mut visitor = WanderingMonsterLocationVisitor { monster_list: LinkedList::new() };
-		world.visit_all_locations(&mut visitor);
-		for item in visitor.monster_list
+		if world.population_density() < 0.25
 		{
-			let name = item.2.get_name();
-			let msg = "A ".to_owned()+&name+" has arrived.";
-			world.message_list.broadcast(msg,item.0,item.1);
-			if item.2.is_active()
+			let mut visitor = WanderingMonsterLocationVisitor { monster_list: LinkedList::new() };
+			world.visit_all_locations(&mut visitor);
+			for item in visitor.monster_list
 			{
-				event_q.insert(Box::new(ActiveMonsterEvent { id: item.2.get_id() }));
+				let name = item.2.get_name();
+				let msg = "A ".to_owned()+&name+" has arrived.";
+				world.message_list.broadcast(msg,item.0,item.1);
+				if item.2.is_active()
+				{
+					event_q.insert(Box::new(ActiveMonsterEvent { id: item.2.get_id() }));
+				}
+				world.add_mobile(item.2,item.0,item.1);
 			}
-			world.add_mobile(item.2,item.0,item.1);
 		}
 		let next_event = Box::new(WanderingMonsterEvent::new());
 		event_q.insert(next_event);
@@ -474,8 +471,8 @@ impl AgeEvent
 // One mobile steals from another
 pub struct StealEvent
 {
-	pub thief: Uuid,
-	pub mark: Uuid,
+	pub thief: usize,
+	pub mark: usize,
 }
 
 impl Event for StealEvent
@@ -562,7 +559,7 @@ impl Event for StealEvent
 // Make some rawhide from corpses
 pub struct MakeRawhideEvent
 {
-	pub maker: Uuid,
+	pub maker: usize,
 }
 
 impl Event for MakeRawhideEvent
@@ -570,7 +567,6 @@ impl Event for MakeRawhideEvent
 	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
 	{
 		let mut successes = 0;
-		let die = Dice { number: 1, die: 100 };
 		let position = world.find_mobile_location(self.maker);
 		if position.is_none()
 		{
@@ -593,7 +589,7 @@ impl Event for MakeRawhideEvent
 				{
 					break;
 				}
-				if mobile.roll_leatherwork() > 50+die.roll()
+				if mobile.roll_leatherwork_or_woodcraft() >= Mobile::routine_task()
 				{
 					successes += 1;
 					mobile.add_item(Item::rawhide(),false);
@@ -606,18 +602,16 @@ impl Event for MakeRawhideEvent
 	}
 }
 
-// Make armor from rawhide
+// Make leather armor from rawhide
 pub struct MakeLeatherArmorEvent
 {
-	pub maker: Uuid,
+	pub maker: usize,
 }
 
 impl Event for MakeLeatherArmorEvent
 {
 	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
 	{
-		let mut material = 0;
-		let die = Dice { number: 1, die: 100 };
 		let position = world.find_mobile_location(self.maker);
 		if position.is_none()
 		{
@@ -632,27 +626,103 @@ impl Event for MakeLeatherArmorEvent
 		}
 		else
 		{
-			// Find and transform each rawhide item
-			loop
+			// Find a piece of rawhide
+			let rawhide = mobile.fetch_item_by_name(&"rawhide".to_string());
+			if rawhide.is_some()
 			{
-				let rawhide = mobile.fetch_item_by_name(&"rawhide".to_string());
-				if rawhide.is_none()
+				if mobile.roll_leatherwork() >= Mobile::skilled_task()
 				{
-					break;
+					world.message_list.broadcast(mobile.name_with_article.clone()+&" makes some leather armor".to_string(),position.0,position.1);
+					let mut armor = Item::leather_armor();
+					world.add_item(position.0,position.1,armor);
 				}
-				material += 1;
+				else
+				{
+					world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins some rawhide".to_string(),position.0,position.1);	
+				}
 			}
-			if material > 0 && mobile.roll_leatherwork() > 25+10*material+die.roll()
+		}
+		world.add_mobile(mobile,position.0,position.1);
+	}
+}
+
+// Make hide armor from a corpse
+pub struct MakeHideArmorEvent
+{
+	pub maker: usize,
+}
+
+impl Event for MakeHideArmorEvent
+{
+	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
+	{
+		let position = world.find_mobile_location(self.maker);
+		if position.is_none()
+		{
+			return;
+		}
+		let position = position.unwrap();
+		let mut mobile = world.fetch_mobile(self.maker).unwrap();
+		// Reschedule if we don't have an action
+		if !mobile.use_action()
+		{
+			event_q.insert(Box::new(MakeHideArmorEvent { maker: self.maker }));
+		}
+		else
+		{
+			// Find a corpse
+			let corpse = mobile.fetch_item_by_name(&"corpse".to_string());
+			if corpse.is_some()
 			{
-				world.message_list.broadcast(mobile.name_with_article.clone()+&" makes some leather armor".to_string(),position.0,position.1);
-				let mut armor = Item::leather_armor();
-				armor.armor_value = material;
+				if mobile.roll_leatherwork_or_woodcraft() >= Mobile::routine_task()
+				{
+					world.message_list.broadcast(mobile.name_with_article.clone()+&" makes some hide armor".to_string(),position.0,position.1);
+					let mut armor = Item::hide_armor();
+					world.add_item(position.0,position.1,armor);
+				}
+				else
+				{
+					world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins a corpse".to_string(),position.0,position.1);	
+				}
+			}
+		}
+		world.add_mobile(mobile,position.0,position.1);
+	}
+}
+
+// Make a pointed stick
+pub struct MakePointedStickEvent
+{
+	pub maker: usize,
+}
+
+impl Event for MakePointedStickEvent
+{
+	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
+	{
+		let position = world.find_mobile_location(self.maker);
+		if position.is_none()
+		{
+			return;
+		}
+		let position = position.unwrap();
+		let mut mobile = world.fetch_mobile(self.maker).unwrap();
+		// Reschedule if we don't have an action
+		if !mobile.use_action()
+		{
+			event_q.insert(Box::new(MakePointedStickEvent { maker: self.maker }));
+		}
+		else
+		{
+			if mobile.roll_woodcraft() >= Mobile::easy_task()
+			{
+				world.message_list.broadcast(mobile.name_with_article.clone()+&" sharpens a stick".to_string(),position.0,position.1);
+				let mut armor = Item::pointed_stick();
 				world.add_item(position.0,position.1,armor);
 			}
 			else
 			{
-				world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins ".to_string()+&material.to_string()+
-					&" pieces of rawhide!".to_string(),position.0,position.1);	
+				world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins a stick".to_string(),position.0,position.1);	
 			}
 		}
 		world.add_mobile(mobile,position.0,position.1);

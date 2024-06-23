@@ -4,14 +4,13 @@ use crate::map::*;
 use crate::mobile::*;
 use crate::items::*;
 use std::collections::BTreeMap;
-use uuid::Uuid;
 
 pub struct WorldState
 {
 	pub message_list: MessageList,
 	map: Map,
-	mobile_uuid_to_location: BTreeMap<Uuid,(i16,i16)>,
-	stash: BTreeMap<Uuid,(Box<Mobile>,i16,i16)>
+	mobile_uuid_to_location: BTreeMap<usize,(i16,i16)>,
+	stash: BTreeMap<usize,(Box<Mobile>,i16,i16)>
 }
 
 impl WorldState
@@ -27,7 +26,14 @@ impl WorldState
 		}
 	}
 
-	pub fn stash_mobile(&mut self, uuid: Uuid)
+	pub fn population_density(&self) -> f32
+	{
+		let area = self.map.number_of_locations();
+		let population = self.mobile_uuid_to_location.len();
+		return population as f32 / area as f32;
+	}
+
+	pub fn stash_mobile(&mut self, uuid: usize)
 	{
 		let position = self.find_mobile_location(uuid).unwrap();
 		let mobile = self.fetch_mobile(uuid).unwrap();
@@ -36,12 +42,12 @@ impl WorldState
 		self.stash.insert(id,tuple);
 	}
 
-	pub fn find_mobile_location(&mut self, uuid: Uuid) -> Option<(i16,i16)>
+	pub fn find_mobile_location(&mut self, uuid: usize) -> Option<(i16,i16)>
 	{
 		return self.mobile_uuid_to_location.get(&uuid).copied();
 	}
 
-	pub fn mobile_active(&mut self, uuid: Uuid) -> bool
+	pub fn mobile_active(&mut self, uuid: usize) -> bool
 	{
 		return self.mobile_uuid_to_location.contains_key(&uuid);
 	}
@@ -51,7 +57,7 @@ impl WorldState
 		return self.map.is_mobile_at_location(x,y);
 	}
 
-	pub fn mobile_exists(&mut self, uuid: Uuid) -> bool
+	pub fn mobile_exists(&mut self, uuid: usize) -> bool
 	{
 		if self.mobile_uuid_to_location.contains_key(&uuid)
 		{
@@ -75,7 +81,7 @@ impl WorldState
 
 	// Find and return a mobile. This removes it from the world and it
 	// must be added back to the world when you are done with it.
-	pub fn fetch_mobile(&mut self, uuid: Uuid) -> Option<Box<Mobile> >
+	pub fn fetch_mobile(&mut self, uuid: usize) -> Option<Box<Mobile> >
 	{
 		let position_ptr = self.mobile_uuid_to_location.remove(&uuid);
 		match position_ptr
@@ -101,7 +107,7 @@ impl WorldState
 
 	// Find and return a mobile by name. This removes it from the world and it
 	// must be added back to the world when you are done with it.
-	pub fn get_mobile_id_by_name(&mut self, x: i16, y: i16, key: &String) -> Option<Uuid>
+	pub fn get_mobile_id_by_name(&mut self, x: i16, y: i16, key: &String) -> Option<usize>
 	{
 		let mut location = self.map.fetch(x,y);
 		let mobile = location.fetch_mobile_by_name(key);

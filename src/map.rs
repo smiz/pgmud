@@ -30,6 +30,11 @@ impl Map
 		return map;
 	}
 
+	pub fn number_of_locations(&self) -> usize
+	{
+		return self.location_by_position.len();
+	}
+
 	pub fn is_mobile_at_location(&self, x: i16, y: i16) -> bool
 	{
 		let location = self.location_by_position.get(&(x,y));

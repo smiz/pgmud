@@ -1,12 +1,11 @@
 use std::collections::LinkedList;
 use std::time::{SystemTime};
-use uuid::Uuid;
 
 struct Message
 {
 	x: i16,
 	y: i16,
-	uuid: Option<Uuid>,
+	uuid: Option<usize>,
 	uuid_is_target: bool,
 	message: String,
 	posted_time: SystemTime
@@ -69,7 +68,7 @@ impl MessageList
 		self.cleanup_old_messages();
 	}
 
-	pub fn post_no_echo(&mut self, msg: String, x: i16, y: i16, origin: Uuid)
+	pub fn post_no_echo(&mut self, msg: String, x: i16, y: i16, origin: usize)
 	{
 		// Insert new message
 		let global_msg = Message {
@@ -84,7 +83,7 @@ impl MessageList
 		self.cleanup_old_messages();
 	}
 
-	pub fn post_for_target(&mut self, msg: String, target: Uuid)
+	pub fn post_for_target(&mut self, msg: String, target: usize)
 	{
 		// Insert new message
 		let global_msg = Message {
@@ -99,7 +98,7 @@ impl MessageList
 		self.cleanup_old_messages();
 	}
 
-	pub fn read_targetted(&mut self, reader: Uuid, after: SystemTime) -> String
+	pub fn read_targetted(&mut self, reader: usize, after: SystemTime) -> String
 	{
 		let mut result = String::new();
 		// Build the message
@@ -114,7 +113,7 @@ impl MessageList
 		return result;
 	}
 
-	pub fn read(&mut self, x: i16, y: i16, reader: Uuid, after: SystemTime) -> String
+	pub fn read(&mut self, x: i16, y: i16, reader: usize, after: SystemTime) -> String
 	{
 		let mut result = String::new();
 		// Build the message
@@ -152,14 +151,14 @@ mod messages_unit_test
 {
 	use std::time::{SystemTime};
 	use super::*;
-	use uuid::Uuid;
 	use std::io::{self,Write};
+	use crate::uid;
 
 	#[test]
 	fn broadcast_test()
 	{
 		let now = SystemTime::now();
-		let uuid = Uuid::new_v4();
+		let uuid = uid::new();
 		let mut msg_list = MessageList::new();
 		msg_list.broadcast("test!".to_string(),0,0);
 		let mut result = msg_list.read(0,0,uuid,now);
@@ -174,14 +173,14 @@ mod messages_unit_test
 	fn target_test()
 	{
 		let now = SystemTime::now();
-		let uuid = Uuid::new_v4();
+		let uuid = uid::new();
 		let mut msg_list = MessageList::new();
 		msg_list.post_for_target("test!".to_string(),uuid);
 		let mut result = msg_list.read(0,0,uuid,now);
 		print!("{}",result);
 		io::stdout().flush().unwrap();
 		assert_eq!(result,"test!\n".to_string());
-		result = msg_list.read(0,0,Uuid::new_v4(),now);
+		result = msg_list.read(0,0,uid::new(),now);
 		assert!(result.is_empty());
 	}
 
@@ -189,12 +188,12 @@ mod messages_unit_test
 	fn no_echo_test()
 	{
 		let now = SystemTime::now();
-		let uuid = Uuid::new_v4();
+		let uuid = uid::new();
 		let mut msg_list = MessageList::new();
 		msg_list.post_no_echo("test!".to_string(),0,0,uuid);
 		let mut result = msg_list.read(0,0,uuid,now);
 		assert!(result.is_empty());
-		result = msg_list.read(0,0,Uuid::new_v4(),now);
+		result = msg_list.read(0,0,uid::new(),now);
 		assert_eq!(result,"test!\n".to_string());
 	}
 }

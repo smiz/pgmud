@@ -4,7 +4,6 @@ use crate::mobile::Mobile;
 use std::collections::BTreeMap;
 use crate::items::*;
 use crate::message::*;
-use uuid::Uuid;
 
 #[derive(Copy,Clone,Eq,PartialEq)]
 pub enum LocationTypeCode
@@ -22,7 +21,7 @@ pub struct Location
 	pub y: i16,
 	description: String,
 	pub location_type: LocationTypeCode,
-	mobiles: BTreeMap<Uuid,Box<Mobile> >,
+	mobiles: BTreeMap<usize,Box<Mobile> >,
 	items: Vec<Box<Item> >
 }
 
@@ -64,7 +63,7 @@ impl Location
 
 	pub fn fetch_mobile_at_random(&mut self) -> Option<Box<Mobile> >
 	{
-		let keys: Vec<Uuid> = self.mobiles.keys().cloned().collect();
+		let keys: Vec<usize> = self.mobiles.keys().cloned().collect();
 		if keys.len() == 0
 		{
 			return None;
@@ -129,7 +128,7 @@ impl Location
 		self.mobiles.insert(mobile.get_id(),mobile);
 	}
 
-	pub fn fetch_mobile_by_guid(&mut self, key: Uuid) -> Option<Box<Mobile> >
+	pub fn fetch_mobile_by_guid(&mut self, key: usize) -> Option<Box<Mobile> >
 	{
 		return self.mobiles.remove(&key);
 	}
