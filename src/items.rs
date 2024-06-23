@@ -15,6 +15,7 @@ pub enum ItemTypeCode
 	PointedStick,
 	Rawhide,
 	LeatherArmor,
+	BoneJewelry,
 }
 
 #[derive(Copy,Clone)]
@@ -36,6 +37,8 @@ pub struct Item
 	pub lifetime: u32,
 	// How much xp for getting this item?
 	pub xp_value: i16,
+	// Do you only get this xp by dropping the item in a town?
+	pub xp_in_town_only: bool,
 	// How common is this item?
 	pub frequency: i16,
 	// Armor protection provided if this is armor?
@@ -83,7 +86,7 @@ impl Item
 
 	pub fn got_item(&mut self, mobile: &mut Mobile, take_xp: bool)
 	{
-		if take_xp
+		if take_xp && !self.xp_in_town_only
 		{
 			mobile.xp += self.xp_value;
 			self.xp_value = 0;
@@ -99,7 +102,7 @@ impl Item
 		}
 	}
 
-	pub fn drop_item(&self, mobile: &mut Mobile)
+	pub fn drop_item(&mut self, mobile: &mut Mobile)
 	{
 		match self.type_code
 		{
@@ -128,6 +131,7 @@ impl Item
 				xp_value: 0,
 				lifetime: 100,
 				armor_value: 0,
+				xp_in_town_only: false,
 			});
 	}
 
@@ -145,6 +149,7 @@ impl Item
 				xp_value: 0,
 				lifetime: 100,
 				armor_value: 0,
+				xp_in_town_only: false,
 			});
 	}
 
@@ -162,6 +167,7 @@ impl Item
 				xp_value: 0,
 				lifetime: 100,
 				armor_value: 0,
+				xp_in_town_only: false,
 			});
 	}
 
@@ -179,6 +185,7 @@ impl Item
 				xp_value: 1,
 				lifetime: 1000,
 				armor_value: 10,
+				xp_in_town_only: false,
 			});
 	}
 
@@ -208,6 +215,7 @@ impl Item
 				xp_value: 1,
 				lifetime: 1000,
 				armor_value: 0,
+				xp_in_town_only: false,
 			});
 	}
 
@@ -225,6 +233,7 @@ impl Item
 				xp_value: 1,
 				lifetime: 100,
 				armor_value: 0,
+				xp_in_town_only: false,
 			});
 	}
 	pub fn rabbit_foot() -> Box<Item>
@@ -241,6 +250,7 @@ impl Item
 				xp_value: 1,
 				lifetime: 1000,
 				armor_value: 0,
+				xp_in_town_only: false,
 			});
 	}
 	pub fn green_penny() -> Box<Item>
@@ -257,6 +267,7 @@ impl Item
 				xp_value: 1,
 				lifetime: 10000,
 				armor_value: 0,
+				xp_in_town_only: false,
 			});
 	}
 	pub fn healthy_nuts_and_seeds() -> Box<Item>
@@ -273,6 +284,7 @@ impl Item
 				xp_value: 1,
 				lifetime: 10000,
 				armor_value: 0,
+				xp_in_town_only: false,
 			});
 	}
 	pub fn forest_debris() -> Box<Item>
@@ -289,7 +301,20 @@ impl Item
 				xp_value: 0,
 				lifetime: std::u32::MAX,
 				armor_value: 0,
+				xp_in_town_only: false,
 			});
+	}
+
+	pub fn bone_jewelry() -> Box<Item>
+	{
+		let mut item = Item::basic_item(ItemTypeCode::BoneJewelry,ItemCategoryCode::Misc);
+		item.description = "Some primitive bone jewelry has been discarded here.".to_string();
+		item.name = "bone jewlery".to_string();
+		item.effect = "This may be worth something in town.".to_string();
+		item.frequency = 50;
+		item.xp_value = 5;
+		item.lifetime = 1000;
+		return item;
 	}
 
 	pub fn woodland_trinket() -> Option<Box<Item> >

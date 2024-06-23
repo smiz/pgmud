@@ -2,7 +2,6 @@ use crate::location::*;
 use crate::message::MessageList;
 use crate::map::*;
 use crate::mobile::*;
-use crate::object::*;
 use crate::items::*;
 use std::collections::BTreeMap;
 use uuid::Uuid;
@@ -47,6 +46,11 @@ impl WorldState
 		return self.mobile_uuid_to_location.contains_key(&uuid);
 	}
 
+	pub fn mobile_exists_at(&self, x: i16, y: i16) -> bool
+	{
+		return self.map.is_mobile_at_location(x,y);
+	}
+
 	pub fn mobile_exists(&mut self, uuid: Uuid) -> bool
 	{
 		if self.mobile_uuid_to_location.contains_key(&uuid)
@@ -59,6 +63,14 @@ impl WorldState
 			Some((mobile,x,y)) => { self.add_mobile(mobile,x,y); return true; }
 			_ => { return false; }
 		}
+	}
+
+	pub fn fetch_mobile_at_random(&mut self, x: i16, y: i16) -> Option<Box<Mobile> >
+	{
+		let mut location = self.map.fetch(x,y);
+		let mobile = location.fetch_mobile_at_random();
+		self.map.replace(location);
+		return mobile;
 	}
 
 	// Find and return a mobile. This removes it from the world and it
@@ -126,10 +138,7 @@ impl WorldState
 
 	pub fn get_location_description(&mut self, x: i16, y: i16) -> String
 	{
-		let location = self.map.fetch(x,y);
-		let result = location.description();
-		self.map.replace(location);
-		return result;
+		return self.map.get_location_description(x,y);
 	}
 
 	pub fn get_location_type(&mut self, x: i16, y: i16) -> LocationTypeCode

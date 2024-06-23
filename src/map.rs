@@ -1,6 +1,7 @@
 use crate::location::Location;
 use crate::location::LocationTypeCode;
 use crate::dice::*;
+use crate::Object;
 use std::collections::BTreeMap;
 use crate::message::*;
 
@@ -29,6 +30,16 @@ impl Map
 		return map;
 	}
 
+	pub fn is_mobile_at_location(&self, x: i16, y: i16) -> bool
+	{
+		let location = self.location_by_position.get(&(x,y));
+		match location
+		{
+			Some(location) => { return location.has_mobiles(); },
+			_ => { return false; }
+		}
+	}
+
 	pub fn get_location_type(&self, x: i16, y: i16) -> LocationTypeCode
 	{
 		let location = self.location_by_position.get(&(x,y));
@@ -36,6 +47,16 @@ impl Map
 		{
 			Some(location) => { return location.location_type; },
 			_ => { return LocationTypeCode::Unexplored; }
+		}
+	}
+
+	pub fn get_location_description(&self, x: i16, y: i16) -> String
+	{
+		let location = self.location_by_position.get(&(x,y));
+		match location
+		{
+			Some(location) => { return location.description(); },
+			_ => { return "Unexplored".to_string(); }
 		}
 	}
 
@@ -62,32 +83,24 @@ impl Map
 	fn count_adjacent(&self, x:i16, y: i16, location_type: LocationTypeCode) -> usize
 	{
 		let mut count = 0;
-		if self.get_location_type(y-1,x) == location_type { count += 1; }
-		if self.get_location_type(y+1,x) == location_type { count += 1; }
-		if self.get_location_type(y,x-1) == location_type { count += 1; }
-		if self.get_location_type(y,x+1) == location_type { count += 1; }
+		for dx in -1..2
+		{
+			for dy in -1..2
+			{
+				if dx == 0 && dy == 0 { continue; }
+				if self.get_location_type(x+dx,y+dy) == location_type { count += 1; }
+			}
+		}
 		return count;
 	}
 
 	fn make_new_location(&mut self, x: i16, y: i16) -> Box<Location>
 	{
-		let forest_count = self.count_adjacent(x,y,LocationTypeCode::Forest);
-		let _deep_wood_count = self.count_adjacent(x,y,LocationTypeCode::DeepWoods);
 		let town_count = self.count_adjacent(x,y,LocationTypeCode::Town);
-		let _unexplored_count = self.count_adjacent(x,y,LocationTypeCode::Unexplored);
-		// A safe corridors always connect towns
-		if forest_count == 1 || town_count == 1
+		// A safe area surrounds town
+		if town_count == 1
 		{
-			let dice = Dice { number: 1, die: 20 };
-			// Towns are never adjacent
-			if town_count == 0 && dice.roll() == 1
-			{
-				return Box::new(Location::new(x,y,LocationTypeCode::Town,"A small town".to_string()));
-			}
-			else
-			{
-				return Box::new(Location::new(x,y,LocationTypeCode::Forest,"In the forest".to_string()));
-			}
+			return Box::new(Location::new(x,y,LocationTypeCode::Forest,"In the forest".to_string()));
 		}
 		// Grow a mix of forest and deep, dangerous woods
 		else
@@ -96,7 +109,7 @@ impl Map
 			if dice.roll() == 1
 			{
 				return Box::new(
-					Location::new(x,y,LocationTypeCode::Town,"In the forest".to_string()));
+					Location::new(x,y,LocationTypeCode::Forest,"In the forest".to_string()));
 			}
 			else
 			{
@@ -113,13 +126,49 @@ impl Map
 			visitor.visit_location(&mut location,messages);
 		}
 	}
+
+	pub fn draw_map(&self) -> String
+	{
+		let mut result = String::new();
+		let keys = self.location_by_position.keys();
+		let mut x_min = 9999;
+		let mut x_max = 0;
+		let mut y_min = 9999;
+		let mut y_max = 0;
+
+		for key in keys
+		{
+			if key.0 < x_min { x_min = key.0; }
+			if key.0 > x_max { x_max = key.0; }
+			if key.1 < y_min { y_min = key.1; }
+			if key.1 > y_max { y_max = key.1; }
+		}
+
+		for y in y_min..y_max+1
+		{
+			for x in x_min..x_max+1
+			{
+				let location = self.get_location_type(x, y);
+				match location
+				{
+					LocationTypeCode::Town => result.push_str("T"),
+					LocationTypeCode::Forest => result.push_str("-"),
+					LocationTypeCode::DeepWoods => result.push_str("*"),
+					LocationTypeCode::Unexplored => result.push_str(" "),
+				}
+			}
+			result.push_str("\n");
+		}
+		return result;
+	}
 }
 
 #[cfg(test)]
 mod map_unit_test
 {
 	use super::*;
-
+	use std::fs::File;
+	use std::io::Write;
 	#[test]
 	fn new_map()
 	{
@@ -141,4 +190,31 @@ mod map_unit_test
 			_ => assert!(false),
 		}
 	}
+
+	#[test]
+	fn random_walk_map()
+	{
+		let die = Dice { number: 1, die: 4 };
+		let mut x = 0;
+		let mut y = 0;
+		let mut map = Map::new();
+		for _ in 0..1000
+		{
+			let direction = match die.roll()
+			{
+				1 => (0,1),
+				2 => (0,-1),
+				3 => (1,0),
+				_ => (-1,0),
+			};
+			x += direction.0;
+			y += direction.1;
+			let location = map.fetch(x,y);
+			map.replace(location); 
+		}
+		let mut file = File::create("map.txt").unwrap();
+		file.write_all(map.draw_map().as_bytes()).unwrap();
+		file.flush();
+	}
+
 }

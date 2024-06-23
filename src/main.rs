@@ -6,6 +6,7 @@ use std::{
 	time::{Duration,SystemTime},
 	collections::LinkedList
 };
+use location::{Location, LocationTypeCode};
 use uuid::Uuid;
 
 mod items;
@@ -17,6 +18,7 @@ mod object;
 mod events;
 mod message;
 mod dice;
+mod uid;
 use crate::world::*;
 use crate::object::*;
 use crate::events::*;
@@ -83,7 +85,7 @@ fn make_item(uuid: Uuid, event_q: &mut EventList, target: &String) -> String
 				event_q.insert(Box::new(MakeRawhideEvent { maker: uuid }));
 				return "You begin making rawhide".to_string();
 			}
-		"leatheramor" =>
+		"leatherarmor" =>
 			{
 				event_q.insert(Box::new(MakeLeatherArmorEvent { maker: uuid }));
 				return "You begin making leather armor".to_string();
@@ -142,7 +144,16 @@ fn drop_item(uuid: Uuid, world: &mut WorldState, target: &String) -> String
 	let item = mobile.fetch_item_by_name(&target);
 	if item.is_some()
 	{
-		world.add_item(position.0,position.1,item.unwrap());
+		let item = item.unwrap();
+		if item.xp_in_town_only && world.get_location_type(position.0, position.1) == LocationTypeCode::Town
+		{
+			result = "A collector eagerly accepts the ".to_string()+&item.name+"!";
+			mobile.xp += item.xp_value;
+		}
+		else
+		{
+			world.add_item(position.0,position.1,item);
+		}
 	}
 	else
 	{

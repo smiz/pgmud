@@ -51,6 +51,7 @@ impl EventList
 
 	pub fn tick(&mut self, world: &mut WorldState)
 	{
+		let now = std::time::Instant::now();
 		if self.is_odd
 		{
 			self.is_odd = false;
@@ -69,6 +70,7 @@ impl EventList
 				event.tick(world,self)
 			}
 		}
+		print!("# events is {}, {} in {} \n",self.odd_event_queue.len(),self.even_event_queue.len(),now.elapsed().as_millis());	
 	}
 }
 
@@ -243,28 +245,47 @@ impl Event for MoveMobileEvent
 	}
 }
 
-
-// Mobile wanders about the terrain on its own, but sticks to the
-// terrain where it was created
-pub struct MoveMonsterEvent
+// An active mobile that may wander, become aggressive, or perform
+// other actions on its own
+pub struct ActiveMonsterEvent
 {
 	pub id: Uuid,
 }
 
-impl Event for MoveMonsterEvent
+impl Event for ActiveMonsterEvent
 {
 	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
 	{
+		// Find the mobile's position
 		let xy = world.find_mobile_location(self.id);
-		match xy
+		// If it has no position, then nothing to do
+		if xy.is_none()
 		{
-			None => { return; }
-			Some(xy) => 
+			return;
+		}
+		let xy = xy.unwrap();
+		// Get the mobile itself
+		let mut mobile = world.fetch_mobile(self.id).unwrap();
+		// Should we become aggressive?
+		if mobile.aggressive
+		{
+			// Is there a target for us?
+			if world.mobile_exists_at(xy.0, xy.1)
+			{
+				let target = world.fetch_mobile_at_random(xy.0, xy.1).unwrap();
+				if target.name != mobile.name && mobile.use_action()
 				{
-					let mobile = world.fetch_mobile(self.id).unwrap();
-					let current_location_type = world.get_location_type(xy.0,xy.1);
-					let die = Dice { number: 1 , die: 100 };
-					let direction = match die.roll()
+					world.message_list.broadcast(mobile.name_with_article.clone()+" attacks "+&target.name_with_article+"!",xy.0,xy.1);	
+					event_q.insert(Box::new(CombatEvent { attacker: self.id, defender: target.get_id() }));
+				}
+				world.add_mobile(target,xy.0,xy.1);
+			}
+		}
+		// Should we wander
+		if mobile.wanders
+		{
+			let die = Dice { number: 1 , die: 100 };
+			let direction = match die.roll()
 					{
 						1 => { (1,0) },
 						2 => { (-1,0) },
@@ -272,20 +293,26 @@ impl Event for MoveMonsterEvent
 						4 => { (0,1) },
 						_ => { (0,0) }
 					};
-					let next_location_type = world.get_location_type(xy.0+direction.0,xy.1+direction.1);
-					if xy != (0,0) && next_location_type == current_location_type
-					{
-						event_q.insert(Box::new(MoveMobileEvent{ uuid: mobile.get_id(), dx: direction.0, dy: direction.1 }));
-					}
-					if mobile.wanders
-					{
-						event_q.insert(Box::new(MoveMonsterEvent { id: mobile.get_id() }));
-					}
-					world.add_mobile(mobile,xy.0,xy.1);
+			if direction != (0,0) 
+			{
+				let next_location_type = world.get_location_type(xy.0+direction.0,xy.1+direction.1);
+				let current_location_type = world.get_location_type(xy.0,xy.1);
+				if current_location_type == next_location_type
+				{
+					event_q.insert(Box::new(MoveMobileEvent{ uuid: mobile.get_id(), dx: direction.0, dy: direction.1 }));
 				}
+			}
 		}
+		// Reschedule the event
+		if mobile.is_active()
+		{
+			event_q.insert(Box::new(ActiveMonsterEvent { id: mobile.get_id() }));
+		}
+		// Put the mobile back into its place
+		world.add_mobile(mobile, xy.0, xy.1);
 	}
 }
+
 // Create wandering monsters
 
 pub struct WanderingMonsterLocationVisitor
@@ -297,7 +324,7 @@ impl LocationVisitor for WanderingMonsterLocationVisitor
 {
 	fn visit_location(&mut self, location: &mut Box<Location>, _messages: &mut MessageList)
 	{
-		if location.num_mobiles() > 3
+		if location.num_mobiles() > 0
 		{
 			return;
 		}
@@ -343,7 +370,7 @@ impl WanderingMonsterLocationVisitor
 		let pick = random::<u8>();
 		match pick
 		{
-			6 => { return Some(Mobile::goblin()); },
+			0 => { return Some(Mobile::goblin()); },
 			_ => { return None; }
 		}
 	}
@@ -388,9 +415,9 @@ impl Event for WanderingMonsterEvent
 			let name = item.2.get_name();
 			let msg = "A ".to_owned()+&name+" has arrived.";
 			world.message_list.broadcast(msg,item.0,item.1);
-			if item.2.wanders
+			if item.2.is_active()
 			{
-				event_q.insert(Box::new(MoveMonsterEvent { id: item.2.get_id() }));
+				event_q.insert(Box::new(ActiveMonsterEvent { id: item.2.get_id() }));
 			}
 			world.add_mobile(item.2,item.0,item.1);
 		}

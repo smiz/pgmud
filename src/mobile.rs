@@ -53,7 +53,9 @@ pub struct Mobile
 	// Target for knowledge rolls
 	pub frequency: i16,
 	// Does this mobile wander about of its own accord?
-	pub wanders: bool
+	pub wanders: bool,
+	// Is this mobile aggressive?
+	pub aggressive: bool
 }
 
 impl Object for Mobile
@@ -169,15 +171,16 @@ impl Mobile
 	pub fn do_damage(&mut self, damage: i16)
 	{
 		let mut damage_applied = damage;
-		if damage >= self.armor
+		// Damage that penetrates the armor reduces its integrity
+		if damage > self.armor
 		{
 			damage_applied -= self.armor;
-			self.armor = 0;
+			self.armor -= 1;
 		}
+		// Damage that does not penetrate the armor is stopped completely
 		else
 		{
 			damage_applied = 0;
-			self.armor -= damage;
 		}
 		self.damage += damage_applied;
 	}
@@ -193,7 +196,7 @@ impl Mobile
 
 	fn xp_cost(&self, skill_level: i16) -> i16
 	{
-		let cost = 2*(skill_level+1);
+		let cost = skill_level+1;
 		if self.xp >= cost
 		{
 			return cost;
@@ -454,17 +457,23 @@ impl Mobile
 		self.inventory.push(item);
 	}
 
-	/// Construct mobile with default values
-	fn new(name: &String, article: &String) -> Box<Mobile>
+	pub fn is_active(&self) -> bool
 	{
+		return self.wanders || self.aggressive;
+	}
+
+	/// Construct mobile with default values
+	fn new(name: &String) -> Box<Mobile>
+	{
+		let article = "a".to_string();
 		return Box::new(
 			Mobile
 			{
 				id: Uuid::new_v4(),
 				name: name.clone(),
-				name_with_article: article.clone()+&name,
-				description: "You see ".to_string()+article+" "+name+".",
-				arrive_prefix: article.clone()+" "+name+" arrive",
+				name_with_article: article.clone()+" "+&name,
+				description: "You see ".to_string()+&article+" "+name+".",
+				arrive_prefix: article.clone()+" "+name+" arrives",
 				leave_prefix: article.clone()+" "+name+" leaves",
 				strength: 10,
 				dexterity: 10,
@@ -491,15 +500,17 @@ impl Mobile
 				is_armored: false,
 				frequency: 10000,
 				armor: 0,
-				wanders: false
+				wanders: false,
+				aggressive: false
 			});
 	}
 
 	pub fn new_character(name: &String) -> Box<Mobile>
 	{
-		let mut character = Mobile::new(name,&"".to_string());
+		let mut character = Mobile::new(name);
 		let die = Dice { number: 3, die: 6 };
 		character.name = name.clone();
+		character.name_with_article = name.clone();
 		character.description = name.clone()+" is here.";
 		character.arrive_prefix = name.clone()+" arrives";
 		character.leave_prefix = name.clone()+" leaves";
@@ -516,7 +527,7 @@ impl Mobile
 	pub fn small_woodland_creature() -> Box<Mobile>
 	{
 		let die = Dice { number: 1, die: 4 };
-		let mut mobile = Mobile::new(&"woodland creature".to_string(),&"a".to_string());
+		let mut mobile = Mobile::new(&"woodland creature".to_string());
 		mobile.description = "A small woodland creature plays happily in the forest.".to_string();
 		mobile.arrive_prefix = "A woodland creature scurries in".to_string();
 		mobile.leave_prefix = "A woodland creature scurries away".to_string();
@@ -543,7 +554,7 @@ impl Mobile
 
 	pub fn rodent() -> Box<Mobile>
 	{
-		let mut mobile = Mobile::new(&"rodent".to_string(),&"a".to_string());
+		let mut mobile = Mobile::new(&"rodent".to_string());
 		mobile.description = "A small rodent watches you keenly.".to_string();
 		mobile.arrive_prefix = "A small rodent scurries in".to_string();
 		mobile.leave_prefix = "A small rodent scurries away".to_string();
@@ -565,165 +576,66 @@ impl Mobile
 
 	pub fn rabbit() -> Box<Mobile>
 	{
-		let mut mobile = Box::new(
-			Mobile {
-				id: Uuid::new_v4(),
-				name: "rabbit".to_string(),
-				name_with_article: "the rabbit".to_string(),
-				description: "A rabbit watches you carefully.".to_string(),
-				arrive_prefix: "A rabbit hops".to_string(),
-				leave_prefix: "A rabbit hops in from".to_string(),
-				strength: 1,
-				dexterity: 18,
-				constitution: 3,
-				max_damage: 3,
-				intelligence: 2,
-				wisdom: 1,
-				charisma: 3,
-				luck: 1,
-				xp: 0,
-				combat: 0,
-				damage: 0,
-				steal: 0,
-				perception: 10,
-				leatherwork: 0,
-				knowledge: 0,
-				actions_per_tick: 1,
-				actions_used: 0,
-				wielded: "bite".to_string(),
-				damage_dice: Dice { number: 1, die: 1 },
-				inventory: Vec::new(),
-				misc_items_slots: 1,
-				is_armed: true,
-				is_armored: false,
-				frequency: 50,
-				armor: 0,
-				wanders: false
-			});
+		let mut mobile = Mobile::new(&"rabbit".to_string());
+		mobile.description = "A rabbit watches you carefully.".to_string();
+		mobile.arrive_prefix = "A rabbit hops".to_string();
+		mobile.leave_prefix = "A rabbit hops in from".to_string();
+		mobile.strength = 1;
+		mobile.dexterity = 18;
+		mobile.constitution = 3;
+		mobile.max_damage = 3;
+		mobile.intelligence = 2;
+		mobile.wisdom = 1;
+		mobile.charisma = 3;
+		mobile.luck = 1;
+		mobile.perception = 10;
+		mobile.wielded = "bite".to_string();
+		mobile.damage_dice = Dice { number: 1, die: 1 };
+		mobile.is_armed = true;
+		mobile.frequency = 50;
 		mobile.add_item(Item::rabbit_foot(),false);
 		return mobile;
 	}
 
 	pub fn beggar() -> Box<Mobile>	
 	{
-		let mut mobile = Box::new(
-			Mobile {
-				id: Uuid::new_v4(),
-				name: "beggar".to_string(),
-				name_with_article: "the beggar".to_string(),
-				description: "A beggar is asking for alms.".to_string(),
-				arrive_prefix: "A beggar arrives".to_string(),
-				leave_prefix: "A beggar leaves".to_string(),
-				strength: 5,
-				dexterity: 10,
-				constitution: 10,
-				max_damage: 10,
-				intelligence: 10,
-				wisdom: 3,
-				charisma: 10,
-				combat: 0,
-				damage: 0,
-				luck: 0,
-				xp: 0,
-				steal: 0,
-				perception: 1,
-				leatherwork: 0,
-				knowledge: 0,
-				actions_per_tick: 1,
-				actions_used: 0,
-				wielded: "fist".to_string(),
-				damage_dice: Dice { number: 1, die: 2 },
-				inventory: Vec::new(),
-				misc_items_slots: 1,
-				is_armed: false,
-				is_armored: false,
-				frequency: 50,
-				armor: 0,
-				wanders: false
-			});
+		let mut mobile = Mobile::new(&"beggar".to_string());
+		mobile.description = "A beggar is asking for alms.".to_string();
+		mobile.luck = -10;
+		mobile.perception = 1;
+		mobile.wielded = "fist".to_string();
+		mobile.frequency = 50;
 		mobile.add_item(Item::green_penny(),false);
 		return mobile;
 	}
 
 	pub fn goblin() -> Box<Mobile>	
 	{
-		let mut mobile = Box::new(
-			Mobile {
-				id: Uuid::new_v4(),
-				name: "goblin".to_string(),
-				name_with_article: "the goblin".to_string(),
-				description: "A goblin menaces you with his stick.".to_string(),
-				arrive_prefix: "A goblin arrives".to_string(),
-				leave_prefix: "A goblin leaves".to_string(),
-				strength: 5,
-				dexterity: 10,
-				constitution: 10,
-				max_damage: 10,
-				intelligence: 10,
-				wisdom: 3,
-				charisma: 10,
-				combat: 0,
-				damage: 0,
-				luck: 0,
-				xp: 0,
-				steal: 0,
-				perception: 1,
-				leatherwork: 0,
-				knowledge: 0,
-				actions_per_tick: 1,
-				actions_used: 0,
-				wielded: "fist".to_string(),
-				damage_dice: Dice { number: 1, die: 2 },
-				inventory: Vec::new(),
-				misc_items_slots: 1,
-				is_armed: false,
-				is_armored: false,
-				frequency: 100,
-				armor: 0,
-				wanders: true
-			});
+		let die = Dice { number : 1 , die : 100 };
+		let mut mobile = Mobile::new(&"goblin".to_string());
+		mobile.description = "A goblin is here, looking menacing.".to_string();
+		mobile.wisdom = 3;
+		mobile.perception = 1;
+		mobile.frequency = 100;
+		mobile.wanders = true;
+		mobile.aggressive = true;
 		let weapon = Item::pointed_stick();
 		mobile.add_item(weapon,false);
+		if die.roll() <= 50
+		{
+			mobile.add_item(Item::bone_jewelry(),false);
+		}
 		return mobile;
 	}
 
 	pub fn foppish_dandy() -> Box<Mobile>	
 	{
-		let mut mobile = Box::new(
-			Mobile {
-				id: Uuid::new_v4(),
-				name: "foppish dandy".to_string(),
-				name_with_article: "the dandy".to_string(),
-				description: "A foppish dandy looks at you disdainfully.".to_string(),
-				arrive_prefix: "A foppish dandy arrives".to_string(),
-				leave_prefix: "A foppish dandy leaves".to_string(),
-				strength: 10,
-				dexterity: 10,
-				constitution: 10,
-				max_damage: 10,
-				intelligence: 10,
-				wisdom: 8,
-				charisma: 13,
-				combat: 0,
-				damage: 0,
-				luck: 0,
-				xp: 0,
-				steal: 0,
-				perception: 0,
-				leatherwork: 0,
-				knowledge: 0,
-				actions_per_tick: 1,
-				actions_used: 0,
-				wielded: "fist".to_string(),
-				damage_dice: Dice { number: 1, die: 2 },
-				inventory: Vec::new(),
-				misc_items_slots: 1,
-				is_armed: false,
-				is_armored: false,
-				frequency: 50,
-				armor: 0,
-				wanders: false
-			});
+		let mut mobile = Mobile::new(&"foppish dandy".to_string());
+		mobile.name_with_article = "a dandy".to_string();
+		mobile.description = "A foppish dandy looks at you disdainfully.".to_string();
+		mobile.wisdom = 8;
+		mobile.charisma = 13;
+		mobile.frequency = 50;
 		let weapon = Item::sword();
 		mobile.add_item(weapon,false);
 		return mobile;
@@ -775,9 +687,9 @@ mod mobile_unit_test
 	#[test]
 	fn save_load_mobile()
 	{
-		let c1 = Mobile::new_character(&"Lord Jim".to_string());
+		let c1 = Mobile::new_character(&"Test".to_string());
 		c1.save_to_file();
-		let mut c2 = Mobile::new_character(&"Lord Jim".to_string());
+		let mut c2 = Mobile::new_character(&"Test".to_string());
 		assert!(c2.load_from_file());
 		assert_eq!(c1.strength,c2.strength);
 		assert_eq!(c1.intelligence,c2.intelligence);
