@@ -81,22 +81,22 @@ fn make_item(uuid: usize, event_q: &mut EventList, target: &String) -> String
 	{
 		"rawhide" =>
 			{
-				event_q.insert(Box::new(MakeRawhideEvent { maker: uuid }));
+				event_q.insert(Box::new(MakeItemEvent { maker: uuid, item: items::ItemTypeCode::Rawhide}));
 				return "You begin making rawhide".to_string();
 			},
 		"leatherarmor" =>
 			{
-				event_q.insert(Box::new(MakeLeatherArmorEvent { maker: uuid }));
+				event_q.insert(Box::new(MakeItemEvent { maker: uuid, item: items::ItemTypeCode::LeatherArmor}));
 				return "You begin making leather armor".to_string();
 			},
 		"hidearmor" =>
 			{
-				event_q.insert(Box::new(MakeHideArmorEvent { maker: uuid }));
+				event_q.insert(Box::new(MakeItemEvent { maker: uuid, item: items::ItemTypeCode::HideArmor }));
 				return "You begin making hide armor".to_string();
 			}
 		"pointedstick" =>
 			{
-				event_q.insert(Box::new(MakePointedStickEvent { maker: uuid }));
+				event_q.insert(Box::new(MakeItemEvent { maker: uuid, item: items::ItemTypeCode::PointedStick }));
 				return "You begin sharpening a stick".to_string();
 			}
 		_ => { return "What is ".to_string()+target+&"?".to_string(); }

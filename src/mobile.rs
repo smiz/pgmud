@@ -72,6 +72,7 @@ impl Object for Mobile
 		result += &(", int: ".to_string()+&(self.intelligence.to_string()));
 		result += &(", wis: ".to_string()+&(self.wisdom.to_string()));
 		result += &(", chr: ".to_string()+&(self.charisma.to_string()));
+		result += &(", luck: ".to_string()+&(self.luck.to_string()));
 		result += &(", xp: ".to_string()+&(self.xp.to_string()));
 		result += &(", dmg: ".to_string()+&(self.damage.to_string())+&"/".to_string()+&(self.max_hit_points().to_string()));
 		result += "\n";
@@ -173,7 +174,7 @@ impl Mobile
 		let _ = wtr.flush().unwrap();
 	}
 
-	pub fn do_damage(&mut self, damage: i16)
+	pub fn do_damage(&mut self, damage: i16) -> i16
 	{
 		let mut damage_applied = damage;
 		// Damage that penetrates the armor reduces its integrity
@@ -191,6 +192,7 @@ impl Mobile
 			damage_applied = 0;
 		}
 		self.damage += damage_applied;
+		return damage_applied;
 	}
 
 	pub fn is_killed(&self)
@@ -656,6 +658,21 @@ impl Mobile
 		{
 			mobile.add_item(treasure.unwrap(),false);
 		}
+		return mobile;
+	}
+
+	pub fn head_hunter() -> Box<Mobile>	
+	{
+		let mut mobile = Mobile::new(&"head hunter".to_string());
+		mobile.description = "A savage head hunter is looking for trophies.".to_string();
+		mobile.perception = 1;
+		mobile.frequency = 100;
+		mobile.wanders = true;
+		mobile.aggressive = true;
+		let weapon = Item::stone_knife();
+		mobile.add_item(weapon,false);
+		let item = Item::shrunken_head();
+		mobile.add_item(item,false);
 		return mobile;
 	}
 

@@ -18,6 +18,8 @@ pub enum ItemTypeCode
 	HideArmor,
 	BoneJewelry,
 	GoldBauble,
+	ShrunkenHead,
+	StoneKnife,
 }
 
 #[derive(Copy,Clone)]
@@ -95,11 +97,13 @@ impl Item
 		}
 		match self.type_code
 		{
+			ItemTypeCode::ShrunkenHead => { mobile.luck -= 1; }
 			ItemTypeCode::RabbitFoot => { mobile.luck += 1; }
 			ItemTypeCode::GreenPenny => { mobile.luck += 1; }
 			ItemTypeCode::Sword => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 8}; }
 			ItemTypeCode::PointedStick => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 3}; }
 			ItemTypeCode::Axe => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 8}; }
+			ItemTypeCode::StoneKnife => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 4}; }
 			_ => { return; }
 		}
 	}
@@ -108,6 +112,7 @@ impl Item
 	{
 		match self.type_code
 		{
+			ItemTypeCode::ShrunkenHead => { mobile.luck += 1; }
 			ItemTypeCode::RabbitFoot => { mobile.luck -= 1; }
 			ItemTypeCode::GreenPenny => { mobile.luck -= 1; }
 			_ => { return; }
@@ -127,7 +132,7 @@ impl Item
 				description: "".to_string(),
 				name: "".to_string(),
 				effect: "".to_string(),
-				frequency: 25,
+				frequency: Mobile::easy_task(),
 				type_code: type_code,
 				category_code: cat_code,
 				xp_value: 0,
@@ -139,74 +144,43 @@ impl Item
 
 	pub fn corpse(in_life: String) -> Box<Item>
 	{
-		return Box::new(
-			Item
-			{
-				description: "A dead ".to_string()+&in_life+" is here.",
-				name: in_life+" corpse",
-				effect: "The clay left behind when the spirit is fled.".to_string(),
-				frequency: 50,
-				type_code: ItemTypeCode::Corpse,
-				category_code: ItemCategoryCode::Misc,
-				xp_value: 0,
-				lifetime: 100,
-				armor_value: 0,
-				xp_in_town_only: false,
-			});
+		let mut item = Item::basic_item(ItemTypeCode::Corpse,ItemCategoryCode::Misc);
+		item.description = "A dead ".to_string()+&in_life+&" is here.".to_string();
+		item.name = in_life+&" corpse".to_string();
+		item.effect = "The clay left behind when the spirit is fled.".to_string();
+		return item;
 	}
 
 	pub fn rawhide() -> Box<Item>
 	{
-		return Box::new(
-			Item
-			{
-				description: "A bit of rawhide is here.".to_string(),
-				name: "rawhide".to_string(),
-				effect: "This can be made into many useful items.".to_string(),
-				frequency: 25,
-				type_code: ItemTypeCode::Rawhide,
-				category_code: ItemCategoryCode::Misc,
-				xp_value: 0,
-				lifetime: 100,
-				armor_value: 0,
-				xp_in_town_only: false,
-			});
+		let mut item = Item::basic_item(ItemTypeCode::Rawhide,ItemCategoryCode::Misc);
+		item.description = "A bit of rawhide is here.".to_string();
+		item.name = "rawhide".to_string();
+		item.effect = "This can be made into many useful items.".to_string();
+		return item;
 	}
 
 	pub fn hide_armor() -> Box<Item>
 	{
-		return Box::new(
-			Item
-			{
-				description: "A stinking suit of hide armor is here.".to_string(),
-				name: "hide armor".to_string(),
-				effect: "Will protect you from harm!.".to_string(),
-				frequency: 25,
-				type_code: ItemTypeCode::HideArmor,
-				category_code: ItemCategoryCode::Armor,
-				xp_value: 1,
-				lifetime: 100,
-				armor_value: 2,
-				xp_in_town_only: false,
-			});
+		let mut item = Item::basic_item(ItemTypeCode::HideArmor,ItemCategoryCode::Armor);
+		item.description = "A stinking suit of hide armor is here.".to_string();
+		item.name = "hide armor".to_string();
+		item.effect = "Will protect you from harm!.".to_string();
+		item.xp_value = 1;
+		item.armor_value = 2;
+		return item;
 	}
 
 	pub fn leather_armor() -> Box<Item>
 	{
-		return Box::new(
-			Item
-			{
-				description: "A suit of leather armor is here.".to_string(),
-				name: "leather armor".to_string(),
-				effect: "Will protect you from harm!.".to_string(),
-				frequency: 25,
-				type_code: ItemTypeCode::LeatherArmor,
-				category_code: ItemCategoryCode::Armor,
-				xp_value: 1,
-				lifetime: 1000,
-				armor_value: 3,
-				xp_in_town_only: false,
-			});
+		let mut item = Item::basic_item(ItemTypeCode::LeatherArmor,ItemCategoryCode::Armor);
+		item.description = "A suit of leather armor is here.".to_string();
+		item.name = "leather armor".to_string();
+		item.effect = "Will protect you from harm!.".to_string();
+		item.xp_value = 1;
+		item.lifetime = 1000;
+		item.armor_value = 3;
+		return item;
 	}
 
 	pub fn axe() -> Box<Item>
@@ -215,7 +189,6 @@ impl Item
 		item.description = "A gleaming axe is here.".to_string();
 		item.name = "axe".to_string();
 		item.effect = "A sharp axe dealing 1d8 damage.".to_string();
-		item.frequency = 50;
 		item.xp_value = 1;
 		item.lifetime = 1000;
 		return item;
@@ -223,106 +196,77 @@ impl Item
 
 	pub fn sword() -> Box<Item>
 	{
-		return Box::new(
-			Item
-			{
-				description: "A sword is here.".to_string(),
-				name: "sword".to_string(),
-				effect: "A sharp sword dealing 1d8 damage.".to_string(),
-				frequency: 50,
-				type_code: ItemTypeCode::Sword,
-				category_code: ItemCategoryCode::Weapon,
-				xp_value: 1,
-				lifetime: 1000,
-				armor_value: 0,
-				xp_in_town_only: false,
-			});
+		let mut item = Item::basic_item(ItemTypeCode::Sword,ItemCategoryCode::Weapon);
+		item.description = "A sword is here.".to_string();
+		item.name = "sword".to_string();
+		item.effect = "A sharp sword dealing 1d8 damage.".to_string();
+		item.xp_value = 1;
+		item.lifetime = 1000;
+		return item;
 	}
 
 	pub fn pointed_stick() -> Box<Item>
 	{
-		return Box::new(
-			Item
-			{
-				description: "A pointed stick is here.".to_string(),
-				name: "pointed stick".to_string(),
-				effect: "A pointed stick deals 1d4 damage.".to_string(),
-				frequency: 50,
-				type_code: ItemTypeCode::PointedStick,
-				category_code: ItemCategoryCode::Weapon,
-				xp_value: 1,
-				lifetime: 100,
-				armor_value: 0,
-				xp_in_town_only: false,
-			});
+		let mut item = Item::basic_item(ItemTypeCode::PointedStick,ItemCategoryCode::Weapon);
+		item.description = "A pointed stick is here.".to_string();
+		item.name = "pointed stick".to_string();
+		item.effect = "A pointed stick deals 1d3 damage.".to_string();
+		item.xp_value = 1;
+		return item;
 	}
+
+	pub fn stone_knife() -> Box<Item>
+	{
+		let mut item = Item::basic_item(ItemTypeCode::StoneKnife,ItemCategoryCode::Weapon);
+		item.description = "A finely made and sharp stone knife.".to_string();
+		item.name = "stone knife".to_string();
+		item.effect = "A stone knife deals 1d4 damage.".to_string();
+		item.frequency = 50;
+		item.xp_value = 1;
+		item.lifetime = 1000;
+		return item;
+	}
+
 	pub fn rabbit_foot() -> Box<Item>
 	{
-		return Box::new(
-			Item
-			{
-				description: "A soft rabbits foot is here.".to_string(),
-				name: "rabbit foot".to_string(),
-				effect: "A lucky rabbit foot! +1 to luck.".to_string(),
-				frequency: 100,
-				type_code: ItemTypeCode::RabbitFoot,
-				category_code: ItemCategoryCode::Misc,
-				xp_value: 1,
-				lifetime: 1000,
-				armor_value: 0,
-				xp_in_town_only: false,
-			});
+		let mut item = Item::basic_item(ItemTypeCode::RabbitFoot,ItemCategoryCode::Misc);
+		item.description = "A soft rabbits foot is here.".to_string();
+		item.name = "rabbit foot".to_string();
+		item.effect = "A lucky rabbit foot! +1 to luck.".to_string();
+		item.xp_value = 1;
+		return item;
 	}
+
 	pub fn green_penny() -> Box<Item>
 	{
-		return Box::new(
-			Item
-			{
-				description: "A greenish penny is here.".to_string(),
-				name: "greenish penny".to_string(),
-				effect: "A lucky penny! +1 to luck.".to_string(),
-				frequency: 100,
-				type_code: ItemTypeCode::GreenPenny,
-				category_code: ItemCategoryCode::Misc,
-				xp_value: 1,
-				lifetime: 10000,
-				armor_value: 0,
-				xp_in_town_only: false,
-			});
+		let mut item = Item::basic_item(ItemTypeCode::GreenPenny,ItemCategoryCode::Misc);
+		item.description = "A greenish penny is here.".to_string();
+		item.name = "greenish penny".to_string();
+		item.effect = "A lucky penny! +1 to luck.".to_string();
+		item.xp_value = 1;
+		item.lifetime = 1000;
+		return item;
 	}
+
 	pub fn healthy_nuts_and_seeds() -> Box<Item>
 	{
-		return Box::new(
-			Item
-			{
-				description: "You see a healthy mix of nuts & seeds.".to_string(),
-				name: "healthy nuts & seeds".to_string(),
-				effect: "You should eat better! -1 to damage.".to_string(),
-				frequency: 100,
-				type_code: ItemTypeCode::HealthyNutsAndSeeds,
-				category_code: ItemCategoryCode::Misc,
-				xp_value: 1,
-				lifetime: 10000,
-				armor_value: 0,
-				xp_in_town_only: false,
-			});
+		let mut item = Item::basic_item(ItemTypeCode::HealthyNutsAndSeeds,ItemCategoryCode::Misc);
+		item.description = "You see a healthy mix of nuts & seeds.".to_string();
+		item.name = "healthy nuts & seeds".to_string();
+		item.effect = "You should eat better! -1 to damage.".to_string();
+		item.xp_value = 1;
+		return item;
 	}
+
 	pub fn forest_debris() -> Box<Item>
 	{
-		return Box::new(
-			Item
-			{
-				description: "Some twigs and leaves litter the forest floor.".to_string(),
-				name: "leaves and twigs".to_string(),
-				effect: "Just forest dentritis.".to_string(),
-				frequency: 0,
-				type_code: ItemTypeCode::ForestDebris,
-				category_code: ItemCategoryCode::Misc,
-				xp_value: 0,
-				lifetime: std::u32::MAX,
-				armor_value: 0,
-				xp_in_town_only: false,
-			});
+		let mut item = Item::basic_item(ItemTypeCode::ForestDebris,ItemCategoryCode::Misc);
+		item.description = "Some twigs and leaves litter the forest floor.".to_string();
+		item.name = "leaves and twigs".to_string();
+		item.effect = "Just forest dentritis.".to_string();
+		item.frequency = 0;
+		item.lifetime = std::u32::MAX;
+		return item;
 	}
 
 	pub fn bone_jewelry() -> Box<Item>
@@ -334,6 +278,7 @@ impl Item
 		item.frequency = 50;
 		item.xp_value = 5;
 		item.lifetime = 1000;
+		item.xp_in_town_only = true;
 		return item;
 	}
 
@@ -343,9 +288,20 @@ impl Item
 		item.description = "A golden bauble shines brightly in the sunlight.".to_string();
 		item.name = "golden bauble".to_string();
 		item.effect = "This may be worth something in town.".to_string();
-		item.frequency = 50;
 		item.xp_value = 5;
 		item.lifetime = 1000;
+		item.xp_in_town_only = true;
+		return item;
+	}
+
+	pub fn shrunken_head() -> Box<Item>
+	{
+		let mut item = Item::basic_item(ItemTypeCode::ShrunkenHead,ItemCategoryCode::Misc);
+		item.description = "A shrunken head discarded here fills you with misgivings.".to_string();
+		item.name = "shrunken head".to_string();
+		item.effect = "This horrid curio might interst a strange collector in town.".to_string();
+		item.xp_value = 5;
+		item.xp_in_town_only = true;
 		return item;
 	}
 
@@ -369,6 +325,7 @@ impl Item
 		{
 			1 => { return Some(Self::gold_bauble()); },
 			2 => { return Some(Self::bone_jewelry()); },
+			3 => { return Some(Self::shrunken_head()); },
 			_ => { return None; }
 		}
 	}

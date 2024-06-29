@@ -73,11 +73,6 @@ impl Location
 		return self.fetch_mobile_by_guid(key);
 	}
 
-	pub fn num_mobiles(&self) -> usize
-	{
-		return self.mobiles.len();
-	}
-
 	pub fn new(x: i16, y: i16, code: LocationTypeCode,
 		description: String) -> Location
 	{

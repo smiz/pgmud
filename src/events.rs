@@ -112,10 +112,10 @@ impl Event for CombatEvent
 			let b_has_actions = b.use_action();
 			if a_has_actions || b_has_actions
 			{
-				let outcome = a.roll_combat() >= b.roll_combat();
+				let outcome = a.roll_combat() > b.roll_combat();
 				if outcome && a_has_actions
 				{
-					b.do_damage(a.damage_dice.roll());
+					let damage = b.do_damage(a.damage_dice.roll());
 					if b.damage > b.max_hit_points()
 					{
 						world.message_list.broadcast(a.name_with_article.clone()+" slays "+&b.name_with_article+"!",a_position.0,a_position.1);	
@@ -126,7 +126,8 @@ impl Event for CombatEvent
 					}
 					else
 					{
-						world.message_list.broadcast(a.name_with_article.clone()+" wounds "+&b.name_with_article+" with a "+&a.wielded+"!",a_position.0,a_position.1);	
+						world.message_list.broadcast(a.name_with_article.clone()+" wounds "+&b.name_with_article+" with a "+&a.wielded+
+							" for "+&damage.to_string()+"!",a_position.0,a_position.1);	
 						world.add_mobile(a,a_position.0,a_position.1);
 						world.add_mobile(b,b_position.0,b_position.1);
 						event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
@@ -134,7 +135,7 @@ impl Event for CombatEvent
 				}
 				else if !outcome && b_has_actions
 				{
-					a.do_damage(b.damage_dice.roll());
+					let damage = a.do_damage(b.damage_dice.roll());
 					if a.damage > a.max_hit_points()
 					{
 						world.message_list.broadcast(b.name_with_article.clone()+" slays "+&a.name_with_article+"!",a_position.0,a_position.1);	
@@ -145,7 +146,8 @@ impl Event for CombatEvent
 					}
 					else
 					{
-						world.message_list.broadcast(b.name_with_article.clone()+" wounds "+&a.name_with_article+" with a "+&b.wielded+"!",a_position.0,a_position.1);	
+						world.message_list.broadcast(b.name_with_article.clone()+" wounds "+&a.name_with_article+" with a "+&b.wielded+	
+							" for "+&damage.to_string()+"!",a_position.0,a_position.1);	
 						world.add_mobile(a,a_position.0,a_position.1);
 						world.add_mobile(b,b_position.0,b_position.1);
 						event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
@@ -365,6 +367,7 @@ impl WanderingMonsterLocationVisitor
 		match pick
 		{
 			0 => { return Some(Mobile::goblin()); },
+			1 => { return Some(Mobile::head_hunter()); },
 			_ => { return None; }
 		}
 	}
@@ -402,6 +405,7 @@ impl Event for WanderingMonsterEvent
 {
 	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
 	{
+		print!("density = {}",world.population_density());
 		if world.population_density() < 0.25
 		{
 			let mut visitor = WanderingMonsterLocationVisitor { monster_list: LinkedList::new() };
@@ -556,59 +560,15 @@ impl Event for StealEvent
 	}
 }
 
-// Make some rawhide from corpses
-pub struct MakeRawhideEvent
+
+// Make some item
+pub struct MakeItemEvent
 {
 	pub maker: usize,
+	pub item: ItemTypeCode,
 }
 
-impl Event for MakeRawhideEvent
-{
-	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
-	{
-		let mut successes = 0;
-		let position = world.find_mobile_location(self.maker);
-		if position.is_none()
-		{
-			return;
-		}
-		let position = position.unwrap();
-		let mut mobile = world.fetch_mobile(self.maker).unwrap();
-		// Reschedule if we don't have an action
-		if !mobile.use_action()
-		{
-			event_q.insert(Box::new(MakeRawhideEvent { maker: self.maker }));
-		}
-		else
-		{
-			// Find and transform each corpse
-			loop
-			{
-				let corpse = mobile.fetch_item_by_name(&"corpse".to_string());
-				if corpse.is_none()
-				{
-					break;
-				}
-				if mobile.roll_leatherwork_or_woodcraft() >= Mobile::routine_task()
-				{
-					successes += 1;
-					mobile.add_item(Item::rawhide(),false);
-				}
-			}
-			world.message_list.broadcast(mobile.name_with_article.clone()+&" makes ".to_string()+&successes.to_string()+
-				&" pieces of rawhide!".to_string(),position.0,position.1);	
-		}
-		world.add_mobile(mobile,position.0,position.1);
-	}
-}
-
-// Make leather armor from rawhide
-pub struct MakeLeatherArmorEvent
-{
-	pub maker: usize,
-}
-
-impl Event for MakeLeatherArmorEvent
+impl Event for MakeItemEvent
 {
 	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
 	{
@@ -622,109 +582,92 @@ impl Event for MakeLeatherArmorEvent
 		// Reschedule if we don't have an action
 		if !mobile.use_action()
 		{
-			event_q.insert(Box::new(MakeLeatherArmorEvent { maker: self.maker }));
+			event_q.insert(Box::new(MakeItemEvent { maker: self.maker, item: self.item }));
 		}
 		else
 		{
-			// Find a piece of rawhide
-			let rawhide = mobile.fetch_item_by_name(&"rawhide".to_string());
-			if rawhide.is_some()
+			match self.item
 			{
-				if mobile.roll_leatherwork() >= Mobile::skilled_task()
-				{
-					world.message_list.broadcast(mobile.name_with_article.clone()+&" makes some leather armor".to_string(),position.0,position.1);
-					let mut armor = Item::leather_armor();
-					world.add_item(position.0,position.1,armor);
-				}
-				else
-				{
-					world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins some rawhide".to_string(),position.0,position.1);	
-				}
+				ItemTypeCode::HideArmor => self.make_hide_armor(&mut mobile,position,world),
+				ItemTypeCode::LeatherArmor => self.make_leather_armor(&mut mobile,position,world),
+				ItemTypeCode::Rawhide => self.make_rawhide(&mut mobile,position,world),
+				ItemTypeCode::PointedStick => self.make_pointed_stick(&mut mobile,position,world),
+				_ => { () }
 			}
 		}
 		world.add_mobile(mobile,position.0,position.1);
 	}
 }
 
-// Make hide armor from a corpse
-pub struct MakeHideArmorEvent
+impl MakeItemEvent
 {
-	pub maker: usize,
-}
-
-impl Event for MakeHideArmorEvent
-{
-	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
+	fn make_hide_armor(&self, mobile: &mut Box<Mobile>, position: (i16,i16), world: &mut WorldState)
 	{
-		let position = world.find_mobile_location(self.maker);
-		if position.is_none()
+		let corpse = mobile.fetch_item_by_name(&"corpse".to_string());
+		if corpse.is_some()
 		{
-			return;
-		}
-		let position = position.unwrap();
-		let mut mobile = world.fetch_mobile(self.maker).unwrap();
-		// Reschedule if we don't have an action
-		if !mobile.use_action()
-		{
-			event_q.insert(Box::new(MakeHideArmorEvent { maker: self.maker }));
-		}
-		else
-		{
-			// Find a corpse
-			let corpse = mobile.fetch_item_by_name(&"corpse".to_string());
-			if corpse.is_some()
+			if mobile.roll_leatherwork_or_woodcraft() > Mobile::routine_task()
 			{
-				if mobile.roll_leatherwork_or_woodcraft() >= Mobile::routine_task()
-				{
-					world.message_list.broadcast(mobile.name_with_article.clone()+&" makes some hide armor".to_string(),position.0,position.1);
-					let mut armor = Item::hide_armor();
-					world.add_item(position.0,position.1,armor);
-				}
-				else
-				{
-					world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins a corpse".to_string(),position.0,position.1);	
-				}
-			}
-		}
-		world.add_mobile(mobile,position.0,position.1);
-	}
-}
-
-// Make a pointed stick
-pub struct MakePointedStickEvent
-{
-	pub maker: usize,
-}
-
-impl Event for MakePointedStickEvent
-{
-	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
-	{
-		let position = world.find_mobile_location(self.maker);
-		if position.is_none()
-		{
-			return;
-		}
-		let position = position.unwrap();
-		let mut mobile = world.fetch_mobile(self.maker).unwrap();
-		// Reschedule if we don't have an action
-		if !mobile.use_action()
-		{
-			event_q.insert(Box::new(MakePointedStickEvent { maker: self.maker }));
-		}
-		else
-		{
-			if mobile.roll_woodcraft() >= Mobile::easy_task()
-			{
-				world.message_list.broadcast(mobile.name_with_article.clone()+&" sharpens a stick".to_string(),position.0,position.1);
-				let mut armor = Item::pointed_stick();
+				world.message_list.broadcast(mobile.name_with_article.clone()+&" makes some hide armor".to_string(),position.0,position.1);
+				let armor = Item::hide_armor();
 				world.add_item(position.0,position.1,armor);
 			}
 			else
 			{
-				world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins a stick".to_string(),position.0,position.1);	
+				world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins a corpse".to_string(),position.0,position.1);	
 			}
 		}
-		world.add_mobile(mobile,position.0,position.1);
+	}
+
+	fn make_rawhide(&self, mobile: &mut Box<Mobile>, position: (i16,i16), world: &mut WorldState)
+	{
+		let mut successes = 0;
+		loop
+		{
+			let corpse = mobile.fetch_item_by_name(&"corpse".to_string());
+			if corpse.is_none()
+			{
+				break;
+			}
+			if mobile.roll_leatherwork_or_woodcraft() > Mobile::routine_task()
+			{
+				successes += 1;
+				mobile.add_item(Item::rawhide(),false);
+			}
+		}
+		world.message_list.broadcast(mobile.name_with_article.clone()+&" makes ".to_string()+&successes.to_string()+
+			&" pieces of rawhide!".to_string(),position.0,position.1);	
+	}
+
+	fn make_leather_armor(&self, mobile: &mut Box<Mobile>, position: (i16,i16), world: &mut WorldState)
+	{
+		let rawhide = mobile.fetch_item_by_name(&"rawhide".to_string());
+		if rawhide.is_some()
+		{
+			if mobile.roll_leatherwork() > Mobile::skilled_task()
+			{
+				world.message_list.broadcast(mobile.name_with_article.clone()+&" makes some leather armor".to_string(),position.0,position.1);
+				let armor = Item::leather_armor();
+				world.add_item(position.0,position.1,armor);
+			}
+			else
+			{
+				world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins some rawhide".to_string(),position.0,position.1);	
+			}
+		}
+	}
+
+	fn make_pointed_stick(&self, mobile: &mut Box<Mobile>, position: (i16,i16), world: &mut WorldState)
+	{
+		if mobile.roll_woodcraft() > Mobile::easy_task()
+		{
+			world.message_list.broadcast(mobile.name_with_article.clone()+&" sharpens a stick".to_string(),position.0,position.1);
+			let armor = Item::pointed_stick();
+			world.add_item(position.0,position.1,armor);
+		}
+		else
+		{
+			world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins a stick".to_string(),position.0,position.1);	
+		}
 	}
 }

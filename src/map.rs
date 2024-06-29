@@ -101,26 +101,25 @@ impl Map
 
 	fn make_new_location(&mut self, x: i16, y: i16) -> Box<Location>
 	{
-		let town_count = self.count_adjacent(x,y,LocationTypeCode::Town);
-		// A safe area surrounds town
-		if town_count == 1
+		let dice = Dice { number: 1, die: 20 };
+		let deep_woods_count = self.count_adjacent(x,y,LocationTypeCode::DeepWoods);
+		// Get our manhattan distance from the origin
+		let distance = x.abs() + y.abs();
+		if distance <= 2
 		{
 			return Box::new(Location::new(x,y,LocationTypeCode::Forest,"In the forest".to_string()));
 		}
-		// Grow a mix of forest and deep, dangerous woods
+		else if deep_woods_count > 0
+		{
+			return Box::new(Location::new(x,y,LocationTypeCode::DeepWoods,"In the deep woods".to_string()));
+		}
+		else if dice.roll() < distance
+		{
+			return Box::new(Location::new(x,y,LocationTypeCode::DeepWoods,"In the deep woods".to_string()));
+		}
 		else
 		{
-			let dice = Dice { number: 1, die: 20 };
-			if dice.roll() == 1
-			{
-				return Box::new(
-					Location::new(x,y,LocationTypeCode::Forest,"In the forest".to_string()));
-			}
-			else
-			{
-				return Box::new(
-					Location::new(x,y,LocationTypeCode::DeepWoods,"In the deep woods".to_string()));
-			}
+			return Box::new(Location::new(x,y,LocationTypeCode::Forest,"In the forest".to_string()));
 		}
 	}
 

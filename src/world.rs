@@ -147,12 +147,9 @@ impl WorldState
 		return self.map.get_location_description(x,y);
 	}
 
-	pub fn get_location_type(&mut self, x: i16, y: i16) -> LocationTypeCode
+	pub fn get_location_type(&self, x: i16, y: i16) -> LocationTypeCode
 	{
-		let location = self.map.fetch(x,y);
-		let result = location.location_type;
-		self.map.replace(location);
-		return result;
+		return self.map.get_location_type(x,y);
 	}
 
 	pub fn add_corpse(&mut self, mobile: &mut Box<Mobile>, x: i16, y: i16)
