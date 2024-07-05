@@ -11,6 +11,7 @@ pub enum LocationTypeCode
 	Town,
 	Forest,
 	DeepWoods,
+	Hills,
 	Unexplored
 }
 
@@ -59,6 +60,16 @@ impl Location
 	pub fn has_mobiles(&self) -> bool
 	{
 		return !self.mobiles.is_empty();
+	}
+
+	pub fn fetch_item_at_random(&mut self) -> Option<Box<Item> >
+	{
+		if self.items.len() == 0
+		{
+			return None;
+		}
+		let index = rand::random::<usize>() % self.items.len();
+		return Some(self.items.remove(index));
 	}
 
 	pub fn fetch_mobile_at_random(&mut self) -> Option<Box<Mobile> >
@@ -253,7 +264,7 @@ mod location_unit_test
 	}
 
 	#[test]
-	fn fetch_at_random_test()
+	fn fetch_mobile_at_random_test()
 	{
 		let mut location = Location::new(0,0,LocationTypeCode::Forest,"Forest".to_string());
 		let rabbit = Mobile::rabbit();
@@ -263,6 +274,18 @@ mod location_unit_test
 		location.add_mobile(rabbit);
 		assert!(location.has_mobiles() == true);
 		let not_empty = location.fetch_mobile_at_random();
+		assert!(not_empty.is_some());
+	}
+
+	#[test]
+	fn fetch_item_at_random_test()
+	{
+		let mut location = Location::new(0,0,LocationTypeCode::Hills,"Hill".to_string());
+		let item = Item::forest_debris();
+		let empty = location.fetch_item_at_random();
+		assert!(empty.is_none());
+		location.add_item(item);
+		let not_empty = location.fetch_item_at_random();
 		assert!(not_empty.is_some());
 	}
 

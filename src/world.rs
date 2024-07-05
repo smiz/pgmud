@@ -142,6 +142,14 @@ impl WorldState
 		return item;	
 	}
 
+	pub fn fetch_item_at_random(&mut self, x: i16, y: i16) -> Option<Box<Item> >
+	{
+		let mut location = self.map.fetch(x,y);
+		let item = location.fetch_item_at_random();
+		self.map.replace(location);
+		return item;	
+	}
+
 	pub fn get_location_description(&mut self, x: i16, y: i16) -> String
 	{
 		return self.map.get_location_description(x,y);

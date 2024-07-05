@@ -85,7 +85,7 @@ impl Map
 		// Update all of the mobile positions
 	}
 
-	fn count_adjacent(&self, x:i16, y: i16, location_type: LocationTypeCode) -> usize
+	fn count_adjacent(&self, x:i16, y: i16, location_type: LocationTypeCode) -> i16 
 	{
 		let mut count = 0;
 		for dx in -1..2
@@ -101,25 +101,34 @@ impl Map
 
 	fn make_new_location(&mut self, x: i16, y: i16) -> Box<Location>
 	{
-		let dice = Dice { number: 1, die: 20 };
+		let d8 = Dice { number: 1, die: 8 };
 		let deep_woods_count = self.count_adjacent(x,y,LocationTypeCode::DeepWoods);
+		let hills_count = self.count_adjacent(x,y,LocationTypeCode::Hills);
 		// Get our manhattan distance from the origin
 		let distance = x.abs() + y.abs();
-		if distance <= 2
+		if distance <= 2 || d8.roll() > distance
 		{
 			return Box::new(Location::new(x,y,LocationTypeCode::Forest,"In the forest".to_string()));
-		}
-		else if deep_woods_count > 0
-		{
-			return Box::new(Location::new(x,y,LocationTypeCode::DeepWoods,"In the deep woods".to_string()));
-		}
-		else if dice.roll() < distance
-		{
-			return Box::new(Location::new(x,y,LocationTypeCode::DeepWoods,"In the deep woods".to_string()));
 		}
 		else
 		{
-			return Box::new(Location::new(x,y,LocationTypeCode::Forest,"In the forest".to_string()));
+			let roll = d8.roll();
+			if roll <= hills_count
+			{
+				return Box::new(Location::new(x,y,LocationTypeCode::Hills,"In the hills".to_string()));
+			}
+			else if roll <= deep_woods_count+hills_count
+			{
+				return Box::new(Location::new(x,y,LocationTypeCode::DeepWoods,"In the deep woods".to_string()));
+			}
+			else if roll % 2 == 0
+			{
+				return Box::new(Location::new(x,y,LocationTypeCode::DeepWoods,"In the deep woods".to_string()));
+			}
+			else 
+			{
+				return Box::new(Location::new(x,y,LocationTypeCode::Hills,"In the hills".to_string()));
+			}
 		}
 	}
 
@@ -158,6 +167,7 @@ impl Map
 					LocationTypeCode::Town => result.push_str("T"),
 					LocationTypeCode::Forest => result.push_str("-"),
 					LocationTypeCode::DeepWoods => result.push_str("*"),
+					LocationTypeCode::Hills => result.push_str("^"),
 					LocationTypeCode::Unexplored => result.push_str(" "),
 				}
 			}

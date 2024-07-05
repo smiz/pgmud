@@ -117,6 +117,10 @@ fn practice(uuid: usize, world: &mut WorldState, skill: &String) -> String
 	{
 		success = mobile.practice_steal();
 	}
+	else if skill == "stealth"
+	{
+		success = mobile.practice_stealth();
+	}
 	else if skill == "perception"
 	{
 		success = mobile.practice_perception();
@@ -191,7 +195,7 @@ fn kill(uuid: usize, world: &mut WorldState, event_q: &mut EventList, target: &S
 	let defender = world.get_mobile_id_by_name(position.0,position.1,&target);
 	match defender
 	{
-		Some(defender) => { event_q.insert(Box::new(CombatEvent { attacker: uuid, defender: defender })); },
+		Some(defender) => { event_q.insert(Box::new(CombatEvent { attacker: uuid, defender: defender, first_round: true })); },
 		_ => { return; }
 	}
 }

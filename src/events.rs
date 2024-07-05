@@ -78,6 +78,8 @@ pub struct CombatEvent
 	// Combatants
 	pub attacker: usize,
 	pub defender: usize,
+	// Is this the first round? That is, can the defender hide.
+	pub first_round: bool,
 }
 
 impl Event for CombatEvent
@@ -108,6 +110,15 @@ impl Event for CombatEvent
 		{
 			let mut a = a.unwrap();
 			let mut b = b.unwrap();
+			// Can the attacker see the defender?
+			if self.first_round && a.roll_perception() < b.roll_stealth()
+			{
+				world.message_list.broadcast(b.name_with_article.to_string()+" eludes "+&a.name_with_article.to_string()+"...",a_position.0,a_position.1);
+				world.add_mobile(a,a_position.0,a_position.1);
+				world.add_mobile(b,b_position.0,b_position.1);
+				return;
+			}
+			// Go on to the combat
 			let a_has_actions = a.use_action();
 			let b_has_actions = b.use_action();
 			if a_has_actions || b_has_actions
@@ -130,7 +141,7 @@ impl Event for CombatEvent
 							" for "+&damage.to_string()+"!",a_position.0,a_position.1);	
 						world.add_mobile(a,a_position.0,a_position.1);
 						world.add_mobile(b,b_position.0,b_position.1);
-						event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
+						event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender, first_round: false }));
 					}
 				}
 				else if !outcome && b_has_actions
@@ -150,7 +161,7 @@ impl Event for CombatEvent
 							" for "+&damage.to_string()+"!",a_position.0,a_position.1);	
 						world.add_mobile(a,a_position.0,a_position.1);
 						world.add_mobile(b,b_position.0,b_position.1);
-						event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
+						event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender, first_round: false }));
 					}
 				}
 				else if outcome
@@ -158,21 +169,21 @@ impl Event for CombatEvent
 					world.message_list.broadcast(b.name_with_article.clone()+" repulses "+&a.name_with_article+"!",a_position.0,a_position.1);	
 					world.add_mobile(a,a_position.0,a_position.1);
 					world.add_mobile(b,b_position.0,b_position.1);
-					event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
+					event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender, first_round: false }));
 				}
 				else
 				{
 					world.message_list.broadcast(a.name_with_article.clone()+" repulses "+&b.name_with_article+"!",a_position.0,a_position.1);	
 					world.add_mobile(a,a_position.0,a_position.1);
 					world.add_mobile(b,b_position.0,b_position.1);
-					event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
+					event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender, first_round: false }));
 				}
 			}
 			else
 			{
 				world.add_mobile(a,a_position.0,a_position.1);
 				world.add_mobile(b,b_position.0,b_position.1);
-				event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender }));
+				event_q.insert(Box::new(CombatEvent { attacker: self.attacker, defender: self.defender, first_round: false }));
 			}
 		}
 		else
@@ -275,8 +286,11 @@ impl Event for ActiveMonsterEvent
 				let target = world.fetch_mobile_at_random(xy.0, xy.1).unwrap();
 				if target.name != mobile.name && mobile.use_action()
 				{
-					world.message_list.broadcast(mobile.name_with_article.clone()+" attacks "+&target.name_with_article+"!",xy.0,xy.1);	
-					event_q.insert(Box::new(CombatEvent { attacker: self.id, defender: target.get_id() }));
+					if target.roll_stealth() > mobile.roll_perception()
+					{
+						world.message_list.broadcast(mobile.name_with_article.clone()+" attacks "+&target.name_with_article+"!",xy.0,xy.1);	
+						event_q.insert(Box::new(CombatEvent { attacker: self.id, defender: target.get_id(), first_round: true }));
+					}
 				}
 				world.add_mobile(target,xy.0,xy.1);
 			}
@@ -300,6 +314,24 @@ impl Event for ActiveMonsterEvent
 				if current_location_type == next_location_type
 				{
 					event_q.insert(Box::new(MoveMobileEvent{ uuid: mobile.get_id(), dx: direction.0, dy: direction.1 }));
+				}
+			}
+		}
+		if mobile.collects && mobile.use_action()
+		{
+			let item = world.fetch_item_at_random(xy.0,xy.1);
+			if item.is_some()
+			{
+				let item = item.unwrap();
+				if mobile.has_room_for_item(&item)
+				{
+					let mob_name = mobile.name_with_article.clone();
+					world.message_list.broadcast(mob_name+&" picks up a ".to_string()+&item.get_name(),xy.0,xy.1);
+					mobile.add_item(item,false);
+				}
+				else
+				{
+					world.add_item(xy.0,xy.1,item);	
 				}
 			}
 		}
@@ -353,6 +385,15 @@ impl LocationVisitor for WanderingMonsterLocationVisitor
 						_ => { return; }
 					}
 				}
+			LocationTypeCode::Hills => 
+				{
+					let monster = self.hills_wandering_monster();
+					match monster
+					{
+						Some(monster) => { self.monster_list.push_back((location.x,location.y,monster)); },
+						_ => { return; }
+					}
+				}
 			_ => { return; }
 		}
 	}
@@ -361,6 +402,18 @@ impl LocationVisitor for WanderingMonsterLocationVisitor
 impl WanderingMonsterLocationVisitor
 {
 
+	fn hills_wandering_monster(&self) -> Option<Box<Mobile> >
+	{
+		let pick = random::<u8>();
+		match pick
+		{
+			0 => { return Some(Mobile::dwarf_miner()); },
+			1 => { return Some(Mobile::dwarf_soldier()); },
+			3 => { return Some(Mobile::orc()); },
+			_ => { return None; }
+		}
+	}
+
 	fn deep_woods_wandering_monster(&self) -> Option<Box<Mobile> >
 	{
 		let pick = random::<u8>();
@@ -368,6 +421,7 @@ impl WanderingMonsterLocationVisitor
 		{
 			0 => { return Some(Mobile::goblin()); },
 			1 => { return Some(Mobile::head_hunter()); },
+			2 => { return Some(Mobile::bandit()); },
 			_ => { return None; }
 		}
 	}
@@ -406,7 +460,7 @@ impl Event for WanderingMonsterEvent
 	fn tick(&self, world: &mut WorldState, event_q: &mut EventList)
 	{
 		print!("density = {}",world.population_density());
-		if world.population_density() < 0.25
+		if world.population_density() < 0.5
 		{
 			let mut visitor = WanderingMonsterLocationVisitor { monster_list: LinkedList::new() };
 			world.visit_all_locations(&mut visitor);
@@ -535,7 +589,7 @@ impl Event for StealEvent
 				else
 				{
 					world.message_list.broadcast(a.name.clone()+" is a thief!",a_position.0,a_position.1);	
-					event_q.insert(Box::new(CombatEvent { attacker: self.mark, defender: self.thief }));
+					event_q.insert(Box::new(CombatEvent { attacker: self.mark, defender: self.thief, first_round: true }));
 				}
 			}
 			// Otherwise wait until we have an action

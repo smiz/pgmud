@@ -5,16 +5,22 @@ use crate::dice::*;
 #[derive(Copy,Clone)]
 pub enum ItemTypeCode
 {
+	UncutGemstone,
+	UselessRock,
 	HealthyNutsAndSeeds,
+	MetalIngot,
+	DwarfBeard,
 	RabbitFoot,
 	GreenPenny,
 	ForestDebris,
 	Corpse,
 	Sword,
+	Pick,
 	Axe,
 	PointedStick,
 	Rawhide,
 	LeatherArmor,
+	ChainArmor,
 	HideArmor,
 	BoneJewelry,
 	GoldBauble,
@@ -98,9 +104,11 @@ impl Item
 		match self.type_code
 		{
 			ItemTypeCode::ShrunkenHead => { mobile.luck -= 1; }
+			ItemTypeCode::DwarfBeard => { mobile.luck -= 1; }
 			ItemTypeCode::RabbitFoot => { mobile.luck += 1; }
 			ItemTypeCode::GreenPenny => { mobile.luck += 1; }
 			ItemTypeCode::Sword => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 8}; }
+			ItemTypeCode::Pick => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 6}; }
 			ItemTypeCode::PointedStick => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 3}; }
 			ItemTypeCode::Axe => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 8}; }
 			ItemTypeCode::StoneKnife => { mobile.wielded = self.name.clone(); mobile.damage_dice = Dice { number: 1, die: 4}; }
@@ -113,6 +121,7 @@ impl Item
 		match self.type_code
 		{
 			ItemTypeCode::ShrunkenHead => { mobile.luck += 1; }
+			ItemTypeCode::DwarfBeard => { mobile.luck += 1; }
 			ItemTypeCode::RabbitFoot => { mobile.luck -= 1; }
 			ItemTypeCode::GreenPenny => { mobile.luck -= 1; }
 			_ => { return; }
@@ -147,7 +156,18 @@ impl Item
 		let mut item = Item::basic_item(ItemTypeCode::Corpse,ItemCategoryCode::Misc);
 		item.description = "A dead ".to_string()+&in_life+&" is here.".to_string();
 		item.name = in_life+&" corpse".to_string();
+		item.frequency = Mobile::trivial_task();
 		item.effect = "The clay left behind when the spirit is fled.".to_string();
+		return item;
+	}
+
+	pub fn metal_ingot() -> Box<Item>
+	{
+		let mut item = Item::basic_item(ItemTypeCode::MetalIngot,ItemCategoryCode::Misc);
+		item.description = "An ignot of metal shines brighly in the sun.".to_string();
+		item.name = "metal ingot".to_string();
+		item.xp_value = 1;
+		item.effect = "This can be made into many useful items.".to_string();
 		return item;
 	}
 
@@ -157,6 +177,18 @@ impl Item
 		item.description = "A bit of rawhide is here.".to_string();
 		item.name = "rawhide".to_string();
 		item.effect = "This can be made into many useful items.".to_string();
+		return item;
+	}
+
+	pub fn chainmail() -> Box<Item>
+	{
+		let mut item = Item::basic_item(ItemTypeCode::ChainArmor,ItemCategoryCode::Armor);
+		item.description = "A gleaning suit of chainmail sits in a pile.".to_string();
+		item.name = "chainmail".to_string();
+		item.effect = "Will protect you from harm!.".to_string();
+		item.xp_value = 2;
+		item.lifetime = 1000;
+		item.armor_value = 4;
 		return item;
 	}
 
@@ -215,13 +247,23 @@ impl Item
 		return item;
 	}
 
+	pub fn pick() -> Box<Item>
+	{
+		let mut item = Item::basic_item(ItemTypeCode::Pick,ItemCategoryCode::Weapon);
+		item.description = "A finely made pick axe.".to_string();
+		item.name = "pick axe".to_string();
+		item.effect = "A pick axe deals 1d6 damage.".to_string();
+		item.xp_value = 1;
+		item.lifetime = 1000;
+		return item;
+	}
+
 	pub fn stone_knife() -> Box<Item>
 	{
 		let mut item = Item::basic_item(ItemTypeCode::StoneKnife,ItemCategoryCode::Weapon);
 		item.description = "A finely made and sharp stone knife.".to_string();
 		item.name = "stone knife".to_string();
 		item.effect = "A stone knife deals 1d4 damage.".to_string();
-		item.frequency = 50;
 		item.xp_value = 1;
 		item.lifetime = 1000;
 		return item;
@@ -233,6 +275,7 @@ impl Item
 		item.description = "A soft rabbits foot is here.".to_string();
 		item.name = "rabbit foot".to_string();
 		item.effect = "A lucky rabbit foot! +1 to luck.".to_string();
+		item.frequency = Mobile::easy_task();
 		item.xp_value = 1;
 		return item;
 	}
@@ -243,6 +286,7 @@ impl Item
 		item.description = "A greenish penny is here.".to_string();
 		item.name = "greenish penny".to_string();
 		item.effect = "A lucky penny! +1 to luck.".to_string();
+		item.frequency = Mobile::easy_task();
 		item.xp_value = 1;
 		item.lifetime = 1000;
 		return item;
@@ -254,6 +298,7 @@ impl Item
 		item.description = "You see a healthy mix of nuts & seeds.".to_string();
 		item.name = "healthy nuts & seeds".to_string();
 		item.effect = "You should eat better! -1 to damage.".to_string();
+		item.frequency = Mobile::easy_task();
 		item.xp_value = 1;
 		return item;
 	}
@@ -264,7 +309,6 @@ impl Item
 		item.description = "Some twigs and leaves litter the forest floor.".to_string();
 		item.name = "leaves and twigs".to_string();
 		item.effect = "Just forest dentritis.".to_string();
-		item.frequency = 0;
 		item.lifetime = std::u32::MAX;
 		return item;
 	}
@@ -275,7 +319,7 @@ impl Item
 		item.description = "Some primitive bone jewelry has been discarded here.".to_string();
 		item.name = "bone jewlery".to_string();
 		item.effect = "This may be worth something in town.".to_string();
-		item.frequency = 50;
+		item.frequency = Mobile::easy_task();
 		item.xp_value = 5;
 		item.lifetime = 1000;
 		item.xp_in_town_only = true;
@@ -288,6 +332,7 @@ impl Item
 		item.description = "A golden bauble shines brightly in the sunlight.".to_string();
 		item.name = "golden bauble".to_string();
 		item.effect = "This may be worth something in town.".to_string();
+		item.frequency = Mobile::easy_task();
 		item.xp_value = 5;
 		item.lifetime = 1000;
 		item.xp_in_town_only = true;
@@ -300,8 +345,46 @@ impl Item
 		item.description = "A shrunken head discarded here fills you with misgivings.".to_string();
 		item.name = "shrunken head".to_string();
 		item.effect = "This horrid curio might interst a strange collector in town.".to_string();
+		item.frequency = Mobile::easy_task();
 		item.xp_value = 5;
 		item.xp_in_town_only = true;
+		return item;
+	}
+
+	pub fn dwarf_beard() -> Box<Item>
+	{
+		let mut item = Item::basic_item(ItemTypeCode::DwarfBeard,ItemCategoryCode::Misc);
+		item.description = "A dwarf's beard is crumpled here, but the dwarf is missing!".to_string();
+		item.name = "dwarf's beard".to_string();
+		item.effect = "This horrid curio might interst a strange collector in town.".to_string();
+		item.frequency = Mobile::easy_task();
+		item.xp_value = 5;
+		item.xp_in_town_only = true;
+		return item;
+	}
+
+	pub fn uncut_precious_stone() -> Box<Item>
+	{
+		let mut item = Item::basic_item(ItemTypeCode::UncutGemstone,ItemCategoryCode::Misc);
+		item.description = "A strangely colorful stone catches your eye.".to_string();
+		item.name = "colorful stone".to_string();
+		item.effect = "This colorful rock is a precious gem, yet uncit. It will fetch a good price in town.".to_string();
+		item.frequency = Mobile::skilled_task();
+		item.xp_value = 10;
+		item.lifetime = 10000;
+		item.xp_in_town_only = true;
+		return item;
+	}
+
+	pub fn useless_rock() -> Box<Item>
+	{
+		let mut item = Item::basic_item(ItemTypeCode::UselessRock,ItemCategoryCode::Misc);
+		item.description = "A strangely colorful stone catches your eye.".to_string();
+		item.name = "colorful stone".to_string();
+		item.effect = "This is a glinty bit of worthless rock.".to_string();
+		item.frequency = Mobile::skilled_task();
+		item.xp_value = 0;
+		item.lifetime = 10000;
 		return item;
 	}
 
@@ -319,13 +402,21 @@ impl Item
 
 	pub fn minor_treasure() -> Option<Box<Item> >
 	{
-		let die = Dice { number: 1, die: 8 };
+		let die = Dice { number: 1, die: 20 };
 		let roll = die.roll();
 		match roll
 		{
 			1 => { return Some(Self::gold_bauble()); },
-			2 => { return Some(Self::bone_jewelry()); },
-			3 => { return Some(Self::shrunken_head()); },
+			2 => { return Some(Self::gold_bauble()); },
+			3 => { return Some(Self::bone_jewelry()); },
+			4 => { return Some(Self::bone_jewelry()); },
+			5 => { return Some(Self::bone_jewelry()); },
+			6 => { return Some(Self::shrunken_head()); },
+			7 => { return Some(Self::shrunken_head()); },
+			8 => { return Some(Self::dwarf_beard()); },
+			9 => { return Some(Self::dwarf_beard()); },
+			10 => { return Some(Self::uncut_precious_stone()); },
+			11 => { return Some(Self::useless_rock()); },
 			_ => { return None; }
 		}
 	}

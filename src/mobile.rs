@@ -38,6 +38,7 @@ pub struct Mobile
 	pub leatherwork: i16,
 	pub woodcraft: i16,
 	pub knowledge: i16,
+	pub stealth: i16,
 	// Description of the object we are using as a weapon
 	pub wielded: String,
 	// Damage done by our attack
@@ -57,7 +58,9 @@ pub struct Mobile
 	// Does this mobile wander about of its own accord?
 	pub wanders: bool,
 	// Is this mobile aggressive?
-	pub aggressive: bool
+	pub aggressive: bool,
+	// Does this mobile collect things?
+	pub collects: bool
 }
 
 impl Object for Mobile
@@ -82,6 +85,7 @@ impl Object for Mobile
 		result += &("leatherwork: ".to_string()+&(self.leatherwork.to_string())+"\n");
 		result += &("woodcraft: ".to_string()+&(self.woodcraft.to_string())+"\n");
 		result += &("knowledge: ".to_string()+&(self.knowledge.to_string())+"\n");
+		result += &("stealth: ".to_string()+&(self.stealth.to_string())+"\n");
 		result += &("misc. slots: ".to_string()+&(self.misc_items_slots).to_string()+"\n");
 		result += &("armed: ".to_string()+&(self.is_armed).to_string()+"\n");
 		result += &("armor protection: ".to_string()+&(self.armor).to_string()+"\n");
@@ -133,6 +137,7 @@ impl Mobile
 										"combat" => { self.combat = value.parse::<i16>().unwrap(); },
 										"steal" => { self.steal = value.parse::<i16>().unwrap(); },
 										"knowledge" => { self.knowledge = value.parse::<i16>().unwrap(); },
+										"stealth" => { self.stealth = value.parse::<i16>().unwrap(); },
 										"perception" => { self.perception = value.parse::<i16>().unwrap(); },
 										"leatherwork" => { self.leatherwork = value.parse::<i16>().unwrap(); },
 										"woodcraft" => { self.woodcraft = value.parse::<i16>().unwrap(); },
@@ -171,25 +176,19 @@ impl Mobile
 		let _ = wtr.write_record(&["leatherwork",&self.leatherwork.to_string()]).unwrap();
 		let _ = wtr.write_record(&["woodcraft",&self.woodcraft.to_string()]).unwrap();
 		let _ = wtr.write_record(&["knowledge",&self.knowledge.to_string()]).unwrap();
+		let _ = wtr.write_record(&["stealth",&self.stealth.to_string()]).unwrap();
 		let _ = wtr.flush().unwrap();
 	}
 
 	pub fn do_damage(&mut self, damage: i16) -> i16
 	{
-		let mut damage_applied = damage;
-		// Damage that penetrates the armor reduces its integrity
-		if damage > self.armor
+		let die = Dice { number:1, die: 20 };
+		let mut damage_applied = damage - self.armor;
+		// Damage that fails to penetrate the armor does one point
+		// on a d20 roll larger than the armor value
+		if damage <= 0 && die.roll() > self.armor
 		{
-			damage_applied -= self.armor;
-			if self.armor > 0
-			{
-				self.armor -= 1;
-			}
-		}
-		// Damage that does not penetrate the armor is stopped completely
-		else
-		{
-			damage_applied = 0;
+			damage_applied = 1;
 		}
 		self.damage += damage_applied;
 		return damage_applied;
@@ -274,6 +273,18 @@ impl Mobile
 		return false;
 	}
 
+	pub fn practice_stealth(&mut self) -> bool
+	{
+		let cost = self.xp_cost(self.stealth);
+		if cost > 0
+		{
+			self.xp -= cost;
+			self.stealth += 1;
+			return true;
+		}
+		return false;
+	}
+
 	pub fn practice_steal(&mut self) -> bool
 	{
 		let cost = self.xp_cost(self.steal);
@@ -337,6 +348,11 @@ impl Mobile
 	pub fn roll_steal(&self) -> i16
 	{
 		return self.roll_skill(self.dexterity,self.steal);
+	}
+
+	pub fn roll_stealth(&self) -> i16
+	{
+		return self.roll_skill(self.dexterity,self.stealth);
 	}
 
 	pub fn roll_knowledge(&self) -> i16
@@ -419,7 +435,7 @@ impl Mobile
 			{
 				ItemCategoryCode::Misc => { self.misc_items_slots += 1; },
 				ItemCategoryCode::Weapon => { self.is_armed = false; self.unwield(); },
-				ItemCategoryCode::Armor => { item.armor_value = self.armor; self.armor = 0; self.is_armored = false; },
+				ItemCategoryCode::Armor => { self.armor -= item.armor_value; self.is_armored = false; },
 			}
 		}
 		return Some(item);
@@ -483,7 +499,7 @@ impl Mobile
 			{
 				ItemCategoryCode::Misc => { self.misc_items_slots -= 1; },
 				ItemCategoryCode::Weapon => { self.is_armed = true; },
-				ItemCategoryCode::Armor => { self.is_armored = true; self.armor = item.armor_value; },
+				ItemCategoryCode::Armor => { self.is_armored = true; self.armor += item.armor_value; },
 			}
 		}
 		self.inventory.push(item);
@@ -491,7 +507,7 @@ impl Mobile
 
 	pub fn is_active(&self) -> bool
 	{
-		return self.wanders || self.aggressive;
+		return self.wanders || self.aggressive || self.collects;
 	}
 
 	/// Construct mobile with default values
@@ -522,6 +538,7 @@ impl Mobile
 				leatherwork: 0,
 				woodcraft: 0,
 				knowledge: 0,
+				stealth: 0,
 				damage: 0,	
 				actions_per_tick: 1,
 				actions_used: 0,
@@ -534,7 +551,8 @@ impl Mobile
 				frequency: 10000,
 				armor: 0,
 				wanders: false,
-				aggressive: false
+				aggressive: false,
+				collects: false
 			});
 	}
 
@@ -642,6 +660,25 @@ impl Mobile
 		return mobile;
 	}
 
+	pub fn bandit() -> Box<Mobile>	
+	{
+		let mut mobile = Mobile::new(&"bandit".to_string());
+		mobile.description = "A bandit is waiting to waylay travellers like you!".to_string();
+		mobile.perception = 1;
+		mobile.wanders = true;
+		mobile.aggressive = true;
+		let weapon = Item::sword();
+		let armor = Item::leather_armor();
+		mobile.add_item(weapon,false);
+		mobile.add_item(armor,false);
+		let treasure = Item::minor_treasure();
+		if treasure.is_some()
+		{
+			mobile.add_item(treasure.unwrap(),false);
+		}
+		return mobile;
+	}
+
 	pub fn goblin() -> Box<Mobile>	
 	{
 		let mut mobile = Mobile::new(&"goblin".to_string());
@@ -703,6 +740,55 @@ impl Mobile
 		return mobile;
 	}
 
+	pub fn orc() -> Box<Mobile>	
+	{
+		let mut mobile = Mobile::new_character(&"orc".to_string());
+		mobile.name_with_article = "the ".to_string()+&mobile.name;
+		mobile.description = "A cruel orc is looking for someone to rob, torture, and kill.".to_string();
+		mobile.strength = 16;
+		mobile.wanders = true;
+		mobile.collects = true;
+		let weapon = Item::axe();
+		let item = Item::chainmail();
+		mobile.add_item(weapon,false);
+		mobile.add_item(item,false);
+		let die = Dice { number: 1, die: 20 };
+		if die.roll() == 1
+		{
+			let item = Item::dwarf_beard();
+			mobile.add_item(item,false);
+		}
+		return mobile;
+	}
+
+	pub fn dwarf_soldier() -> Box<Mobile>	
+	{
+		let mut mobile = Mobile::new_character(&"dwarven soldier".to_string());
+		mobile.name_with_article = "the ".to_string()+&mobile.name;
+		mobile.description = "A tough lookin dwarf is looking is looking troublemakers".to_string();
+		mobile.strength = 16;
+		mobile.wanders = true;
+		let weapon = Item::axe();
+		let item = Item::chainmail();
+		mobile.add_item(weapon,false);
+		mobile.add_item(item,false);
+		return mobile;
+	}
+
+	pub fn dwarf_miner() -> Box<Mobile>	
+	{
+		let mut mobile = Mobile::new_character(&"dwarven miner".to_string());
+		mobile.name_with_article = "the ".to_string()+&mobile.name;
+		mobile.description = "A tough lookin dwarf is here digging for precious metals.".to_string();
+		mobile.strength = 16;
+		mobile.wanders = true;
+		let weapon = Item::pick();
+		let item = Item::metal_ingot();
+		mobile.add_item(weapon,false);
+		mobile.add_item(item,false);
+		return mobile;
+	}
+
 	// Standard difficulty levels
 	pub fn trivial_task() -> i16 { return 5*5; }
 	pub fn easy_task() -> i16 { return 5*10; }
@@ -725,22 +811,21 @@ mod mobile_unit_test
 		let mut mobile = Mobile::new(&"goober".to_string());
 		mobile.armor = 2;
 		mobile.damage = 0;
-		mobile.do_damage(1);
-		assert_eq!(mobile.damage,0);
-		mobile.do_damage(2);
-		assert_eq!(mobile.damage,0);
+		for i in 1..100
+		{
+			mobile.do_damage(2);
+			assert!(mobile.damage <= 1);
+			mobile.damage = 0;
+		}
+		for i in 1..100
+		{
+			mobile.do_damage(1);
+			assert!(mobile.damage <= 1);
+			mobile.damage = 0;
+		}
 		mobile.do_damage(3);
 		assert_eq!(mobile.damage,1);
-		assert_eq!(mobile.armor,1);
-		mobile.do_damage(1);
-		assert_eq!(mobile.damage,1);
-		assert_eq!(mobile.armor,1);
-		mobile.do_damage(2);
-		assert_eq!(mobile.damage,2);
-		assert_eq!(mobile.armor,0);
-		mobile.do_damage(1);
-		assert_eq!(mobile.damage,3);
-		assert_eq!(mobile.armor,0);
+		assert_eq!(mobile.armor,2);
 	}
 
 	#[test]
@@ -749,6 +834,19 @@ mod mobile_unit_test
 		let mut mobile = Mobile::new_character(&"Jim".to_string());
 		let result1 = mobile.fetch_first_item();
 		assert!(result1.is_none());
+	}
+
+	#[test]
+	fn add_remove_armor()
+	{
+		let armor = Item::leather_armor();
+		let protection = armor.armor_value;
+		let mut mobile = Mobile::new(&"goober".to_string());
+		mobile.add_item(armor, true);
+		assert_eq!(mobile.armor,protection);
+		let armor = mobile.fetch_first_item();
+		assert_eq!(mobile.armor,0);
+		assert_eq!(armor.unwrap().armor_value,protection);
 	}
 
 	#[test]
@@ -781,6 +879,7 @@ mod mobile_unit_test
 		assert_eq!(c1.combat,c2.combat);
 		assert_eq!(c1.steal,c2.steal);
 		assert_eq!(c1.knowledge,c2.knowledge);
+		assert_eq!(c1.stealth,c2.stealth);
 		assert_eq!(c1.perception,c2.perception);
 		assert_eq!(c1.leatherwork,c2.leatherwork);
 		assert_eq!(c1.woodcraft,c2.woodcraft);
