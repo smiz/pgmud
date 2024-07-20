@@ -1,10 +1,5 @@
 use std::{
-	io::{prelude::*,ErrorKind},
-	net::{TcpListener,TcpStream},
-	thread,
-	sync::{Arc,Mutex},
-	time::{Duration,SystemTime},
-	collections::LinkedList
+	collections::LinkedList, fs, io::{prelude::*,ErrorKind}, net::{TcpListener,TcpStream}, sync::{Arc,Mutex}, thread, time::{Duration,SystemTime}
 };
 use location::{LocationTypeCode};
 
@@ -99,6 +94,31 @@ fn make_item(uuid: usize, event_q: &mut EventList, target: &String) -> String
 				event_q.insert(Box::new(MakeItemEvent { maker: uuid, item: items::ItemTypeCode::PointedStick }));
 				return "You begin sharpening a stick".to_string();
 			}
+		"knife" =>
+			{
+				event_q.insert(Box::new(MakeItemEvent { maker: uuid, item: items::ItemTypeCode::StoneKnife }));
+				return "You begin knapping a stone".to_string();
+			}
+		"sword" =>
+			{
+				event_q.insert(Box::new(MakeItemEvent { maker: uuid, item: items::ItemTypeCode::Sword }));
+				return "You begin forging a sword".to_string();
+			}
+		"axe" =>
+			{
+				event_q.insert(Box::new(MakeItemEvent { maker: uuid, item: items::ItemTypeCode::Axe }));
+				return "You begin forging an axe".to_string();
+			}
+		"pick" =>
+			{
+				event_q.insert(Box::new(MakeItemEvent { maker: uuid, item: items::ItemTypeCode::Pick }));
+				return "You begin forging a pick".to_string();
+			}
+		"chainmail" =>
+			{
+				event_q.insert(Box::new(MakeItemEvent { maker: uuid, item: items::ItemTypeCode::ChainArmor }));
+				return "You begin make a shirt of chain".to_string();
+			}
 		_ => { return "What is ".to_string()+target+&"?".to_string(); }
 	}
 }
@@ -136,6 +156,10 @@ fn practice(uuid: usize, world: &mut WorldState, skill: &String) -> String
 	else if skill == "woodcraft"
 	{
 		success = mobile.practice_woodcraft();
+	}
+	else if skill == "metalwork"
+	{
+		success = mobile.practice_metalwork();
 	}
 	else
 	{
@@ -374,6 +398,10 @@ fn process_command(command: &mut LinkedList<String>, uuid: usize, world: &mut Wo
 		"w" => { goto(uuid,-1,0,event_q); return String::new(); }
 		"n" => { goto(uuid,0,1,event_q); return String::new(); } 
 		"s" => { goto(uuid,0,-1,event_q); return String::new(); }
+		"help" =>
+			{
+				return fs::read_to_string("help.txt").expect("could not read help.txt");
+			}
 		"eat" =>
 			{
 				let target = command.pop_front();

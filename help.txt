@@ -1,0 +1,28 @@
+Welcome to the Procedurally Generated MUD! Here you can:
+
+e               Go east.
+w               Go west.
+n               Go north.
+s               Go south.
+help            This message!
+eat <object>    Try to eat or drink an object.
+look            Look at your surroudings.
+look <object>   Look at an object.
+kill <object>   Attach an object.
+steal <object>  Try to steal something from the object.
+get <object>    Pick something up.
+drop <object>   Drop something.
+prac <skill>    Practice a skill. The skills are combat,
+                steal, stealth, perception, knowledge,
+                leatherwork, woodcraft, and metalwork.
+quit            Stash your character until next time.
+stat            Get your statistics.
+stat <object>   Get the statistics of some object.
+i               List your inventory.
+make <object>   Try to make something. You can try 
+                to make anything you like. The object  
+                name should be same as the item but
+                without spaces. For example, to make
+                "leather armor" use make leathearmor.
+                You can make hidearmor and rawhide from
+                corpses.

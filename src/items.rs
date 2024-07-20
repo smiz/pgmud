@@ -2,7 +2,7 @@ use crate::object::Object;
 use crate::mobile::*;
 use crate::dice::*;
 
-#[derive(Copy,Clone)]
+#[derive(Copy,Clone,PartialEq)]
 pub enum ItemTypeCode
 {
 	UncutGemstone,
@@ -26,6 +26,7 @@ pub enum ItemTypeCode
 	GoldBauble,
 	ShrunkenHead,
 	StoneKnife,
+	HealingPotion
 }
 
 #[derive(Copy,Clone)]
@@ -90,6 +91,12 @@ impl Item
 		match self.type_code
 		{
 			ItemTypeCode::HealthyNutsAndSeeds => { mobile.damage -= 1; return true; }
+			ItemTypeCode::HealingPotion =>
+				{
+					let die = Dice { number: 2 , die: 4 };
+					mobile.damage -= die.roll();
+					return true;
+				}
 			_ => { return false; }
 		}
 	}
@@ -149,6 +156,17 @@ impl Item
 				armor_value: 0,
 				xp_in_town_only: false,
 			});
+	}
+
+	pub fn healing_potion() -> Box<Item>
+	{
+		let mut item = Item::basic_item(ItemTypeCode::HealingPotion,ItemCategoryCode::Misc);
+		item.description = "A bottle of swirling liquid has been discarded here.".to_string();
+		item.name = "potion".to_string();
+		item.frequency = Mobile::skilled_task();
+		item.effect = "This is a potion of healing!".to_string();
+		item.xp_value = 1;
+		return item;
 	}
 
 	pub fn corpse(in_life: String) -> Box<Item>
@@ -417,6 +435,7 @@ impl Item
 			9 => { return Some(Self::dwarf_beard()); },
 			10 => { return Some(Self::uncut_precious_stone()); },
 			11 => { return Some(Self::useless_rock()); },
+			12 => { return Some(Self::healing_potion()); },
 			_ => { return None; }
 		}
 	}

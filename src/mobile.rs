@@ -36,6 +36,7 @@ pub struct Mobile
 	pub steal: i16,
 	pub perception: i16,
 	pub leatherwork: i16,
+	pub metalwork: i16,
 	pub woodcraft: i16,
 	pub knowledge: i16,
 	pub stealth: i16,
@@ -83,6 +84,7 @@ impl Object for Mobile
 		result += &("steal: ".to_string()+&(self.steal.to_string())+"\n");
 		result += &("perception: ".to_string()+&(self.perception.to_string())+"\n");
 		result += &("leatherwork: ".to_string()+&(self.leatherwork.to_string())+"\n");
+		result += &("metalwork: ".to_string()+&(self.metalwork.to_string())+"\n");
 		result += &("woodcraft: ".to_string()+&(self.woodcraft.to_string())+"\n");
 		result += &("knowledge: ".to_string()+&(self.knowledge.to_string())+"\n");
 		result += &("stealth: ".to_string()+&(self.stealth.to_string())+"\n");
@@ -140,6 +142,7 @@ impl Mobile
 										"stealth" => { self.stealth = value.parse::<i16>().unwrap(); },
 										"perception" => { self.perception = value.parse::<i16>().unwrap(); },
 										"leatherwork" => { self.leatherwork = value.parse::<i16>().unwrap(); },
+										"metalwork" => { self.metalwork = value.parse::<i16>().unwrap(); },
 										"woodcraft" => { self.woodcraft = value.parse::<i16>().unwrap(); },
 										"id" => { self.id = value.parse::<usize>().unwrap(); },
 										_ => { () }
@@ -174,6 +177,7 @@ impl Mobile
 		let _ = wtr.write_record(&["steal",&self.steal.to_string()]).unwrap();
 		let _ = wtr.write_record(&["perception",&self.perception.to_string()]).unwrap();
 		let _ = wtr.write_record(&["leatherwork",&self.leatherwork.to_string()]).unwrap();
+		let _ = wtr.write_record(&["metalwork",&self.metalwork.to_string()]).unwrap();
 		let _ = wtr.write_record(&["woodcraft",&self.woodcraft.to_string()]).unwrap();
 		let _ = wtr.write_record(&["knowledge",&self.knowledge.to_string()]).unwrap();
 		let _ = wtr.write_record(&["stealth",&self.stealth.to_string()]).unwrap();
@@ -244,6 +248,18 @@ impl Mobile
 		{
 			self.xp -= cost;
 			self.woodcraft += 1;
+			return true;
+		}
+		return false;
+	}
+
+	pub fn practice_metalwork(&mut self) -> bool
+	{
+		let cost = self.xp_cost(self.metalwork);
+		if cost > 0
+		{
+			self.xp -= cost;
+			self.metalwork += 1;
 			return true;
 		}
 		return false;
@@ -365,6 +381,11 @@ impl Mobile
 		return self.roll_skill(self.wisdom,self.perception);
 	}
 
+	pub fn roll_metalwork(&self) -> i16
+	{
+		return self.roll_skill(self.intelligence,self.metalwork);
+	}
+
 	pub fn roll_leatherwork(&self) -> i16
 	{
 		return self.roll_skill(self.intelligence,self.leatherwork);
@@ -480,6 +501,20 @@ impl Mobile
 		return None;
 	}
 
+	pub fn fetch_item_by_type(&mut self, item_type: ItemTypeCode) -> Option<Box<Item> >
+	{
+		let mut i = 0;
+		while i < self.inventory.len()
+		{
+    		if item_type == self.inventory[i].type_code
+			{
+				return self.fetch_item_by_position(i);
+			}
+			i += 1;
+		}
+		return None;
+	}
+
 	pub fn has_room_for_item(&mut self, item: &Box<Item>) -> bool
 	{
 		match item.category_code
@@ -536,6 +571,7 @@ impl Mobile
 				steal: 0,
 				perception: 0,
 				leatherwork: 0,
+				metalwork: 0,
 				woodcraft: 0,
 				knowledge: 0,
 				stealth: 0,
@@ -548,7 +584,7 @@ impl Mobile
 				misc_items_slots: 10,
 				is_armed: false,
 				is_armored: false,
-				frequency: 10000,
+				frequency: Mobile::routine_task(),
 				armor: 0,
 				wanders: false,
 				aggressive: false,
@@ -572,6 +608,7 @@ impl Mobile
 		character.intelligence = die.roll();
 		character.wisdom = die.roll();
 		character.charisma = die.roll();
+		character.frequency = Mobile::heroic_task();
 		return character;
 	}
 
@@ -594,7 +631,6 @@ impl Mobile
 		mobile.wielded = "bite".to_string();
 		mobile.damage_dice = Dice { number: 1, die: 2 };
 		mobile.is_armed = true;
-		mobile.frequency = 50;
 		let treasure = Item::woodland_trinket();
 		if treasure.is_some()
 		{	
@@ -620,7 +656,6 @@ impl Mobile
 		mobile.wielded = "bite".to_string();
 		mobile.damage_dice = Dice { number: 1, die: 1 };
 		mobile.is_armed = true;
-		mobile.frequency = 50;
 		mobile.add_item(Item::healthy_nuts_and_seeds(),false);
 		return mobile;
 	}
@@ -643,7 +678,6 @@ impl Mobile
 		mobile.wielded = "bite".to_string();
 		mobile.damage_dice = Dice { number: 1, die: 1 };
 		mobile.is_armed = true;
-		mobile.frequency = 50;
 		mobile.add_item(Item::rabbit_foot(),false);
 		return mobile;
 	}
@@ -655,7 +689,6 @@ impl Mobile
 		mobile.luck = -10;
 		mobile.perception = 1;
 		mobile.wielded = "fist".to_string();
-		mobile.frequency = 50;
 		mobile.add_item(Item::green_penny(),false);
 		return mobile;
 	}
@@ -685,7 +718,6 @@ impl Mobile
 		mobile.description = "A goblin is here, looking menacing.".to_string();
 		mobile.wisdom = 3;
 		mobile.perception = 1;
-		mobile.frequency = 100;
 		mobile.wanders = true;
 		mobile.aggressive = true;
 		let weapon = Item::pointed_stick();
@@ -703,7 +735,6 @@ impl Mobile
 		let mut mobile = Mobile::new(&"head hunter".to_string());
 		mobile.description = "A savage head hunter is looking for trophies.".to_string();
 		mobile.perception = 1;
-		mobile.frequency = 100;
 		mobile.wanders = true;
 		mobile.aggressive = true;
 		let weapon = Item::stone_knife();
@@ -720,7 +751,6 @@ impl Mobile
 		mobile.description = "A foppish dandy looks at you disdainfully.".to_string();
 		mobile.wisdom = 8;
 		mobile.charisma = 13;
-		mobile.frequency = 50;
 		let weapon = Item::sword();
 		mobile.add_item(weapon,false);
 		return mobile;
@@ -748,6 +778,7 @@ impl Mobile
 		mobile.strength = 16;
 		mobile.wanders = true;
 		mobile.collects = true;
+		mobile.frequency = Mobile::skilled_task();
 		let weapon = Item::axe();
 		let item = Item::chainmail();
 		mobile.add_item(weapon,false);
@@ -768,6 +799,7 @@ impl Mobile
 		mobile.description = "A tough lookin dwarf is looking is looking troublemakers".to_string();
 		mobile.strength = 16;
 		mobile.wanders = true;
+		mobile.frequency = Mobile::skilled_task();
 		let weapon = Item::axe();
 		let item = Item::chainmail();
 		mobile.add_item(weapon,false);
@@ -782,6 +814,7 @@ impl Mobile
 		mobile.description = "A tough lookin dwarf is here digging for precious metals.".to_string();
 		mobile.strength = 16;
 		mobile.wanders = true;
+		mobile.frequency = Mobile::skilled_task();
 		let weapon = Item::pick();
 		let item = Item::metal_ingot();
 		mobile.add_item(weapon,false);
@@ -882,6 +915,7 @@ mod mobile_unit_test
 		assert_eq!(c1.stealth,c2.stealth);
 		assert_eq!(c1.perception,c2.perception);
 		assert_eq!(c1.leatherwork,c2.leatherwork);
+		assert_eq!(c1.metalwork,c2.metalwork);
 		assert_eq!(c1.woodcraft,c2.woodcraft);
 		let mut c3 = Mobile::new_character(&"Lord Tom".to_string());
 		assert!(!c3.load_from_file());

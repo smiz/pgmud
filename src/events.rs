@@ -642,10 +642,15 @@ impl Event for MakeItemEvent
 		{
 			match self.item
 			{
+				ItemTypeCode::StoneKnife => self.make_stone_knife(&mut mobile,position,world),
 				ItemTypeCode::HideArmor => self.make_hide_armor(&mut mobile,position,world),
 				ItemTypeCode::LeatherArmor => self.make_leather_armor(&mut mobile,position,world),
 				ItemTypeCode::Rawhide => self.make_rawhide(&mut mobile,position,world),
 				ItemTypeCode::PointedStick => self.make_pointed_stick(&mut mobile,position,world),
+				ItemTypeCode::Sword => self.make_metal_item(&mut mobile,position,world),
+				ItemTypeCode::ChainArmor => self.make_metal_item(&mut mobile,position,world),
+				ItemTypeCode::Axe => self.make_metal_item(&mut mobile,position,world),
+				ItemTypeCode::Pick => self.make_metal_item(&mut mobile,position,world),
 				_ => { () }
 			}
 		}
@@ -670,6 +675,49 @@ impl MakeItemEvent
 			{
 				world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins a corpse".to_string(),position.0,position.1);	
 			}
+		}
+		else
+		{
+			world.message_list.post_for_target("You need a corpse!".to_string(),mobile.get_id());
+		}
+	}
+
+	fn make_metal_item(&self, mobile: &mut Box<Mobile>, position: (i16,i16), world: &mut WorldState)
+	{
+		if position.0 != 0 || position.1 != 0
+		{
+			world.message_list.post_for_target("You need the forge in town!".to_string(),mobile.get_id());
+			return;
+		}
+		let ingot = mobile.fetch_item_by_type(ItemTypeCode::MetalIngot);
+		if ingot.is_none()
+		{
+			world.message_list.post_for_target("You need an ingot of metal!".to_string(),mobile.get_id());
+			return;
+		}
+		let difficulty = match self.item
+		{
+			ItemTypeCode::Sword => Mobile::very_skilled_task(),
+			ItemTypeCode::Axe => Mobile::skilled_task(),
+			ItemTypeCode::ChainArmor => Mobile::skilled_task(),
+			ItemTypeCode::Pick => Mobile::skilled_task(),
+			_ => { Mobile::routine_task() }
+		};
+		if mobile.roll_metalwork() > difficulty
+		{
+			world.message_list.broadcast(mobile.name_with_article.clone()+&" works at the forge".to_string(),position.0,position.1);	
+			match self.item
+			{
+				ItemTypeCode::Sword => { world.add_item(position.0, position.1, Item::sword()); },
+				ItemTypeCode::Axe => { world.add_item(position.0, position.1, Item::axe()); },
+				ItemTypeCode::ChainArmor => { world.add_item(position.0, position.1, Item::chainmail()); },
+				ItemTypeCode::Pick => { world.add_item(position.0, position.1, Item::pick()); },
+				_ => { () }
+			}
+		}
+		else
+		{
+			world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins a metal ingot".to_string(),position.0,position.1);	
 		}
 	}
 
@@ -709,6 +757,24 @@ impl MakeItemEvent
 				world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins some rawhide".to_string(),position.0,position.1);	
 			}
 		}
+		else
+		{
+			world.message_list.post_for_target("You need some rawhide!".to_string(),mobile.get_id());
+		}
+	}
+
+	fn make_stone_knife(&self, mobile: &mut Box<Mobile>, position: (i16,i16), world: &mut WorldState)
+	{
+		if mobile.roll_woodcraft() > Mobile::very_skilled_task()
+		{
+			world.message_list.broadcast(mobile.name_with_article.clone()+&" flakes a stone knife".to_string(),position.0,position.1);
+			let armor = Item::stone_knife();
+			world.add_item(position.0,position.1,armor);
+		}
+		else
+		{
+			world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins a bit of chert".to_string(),position.0,position.1);	
+		}
 	}
 
 	fn make_pointed_stick(&self, mobile: &mut Box<Mobile>, position: (i16,i16), world: &mut WorldState)
@@ -724,4 +790,53 @@ impl MakeItemEvent
 			world.message_list.broadcast(mobile.name_with_article.clone()+&" ruins a stick".to_string(),position.0,position.1);	
 		}
 	}
+}
+
+#[cfg(test)]
+mod events_unit_test
+{
+	use super::*;
+	use crate::world::*;
+	use crate::mobile::*;
+	use crate::items::*;
+
+	#[test]
+	fn make_metal_no_ingot_test()
+	{
+		let mut event_q = EventList::new();
+		let mut world = WorldState::new();
+		let mut mobile = Mobile::new_character(&"Jim".to_string());
+		let id = mobile.get_id();
+		mobile.metalwork = 100;
+		let mut event = MakeItemEvent { maker: id, item: ItemTypeCode::Sword };
+		world.add_mobile(mobile, 0, 0);
+		event.tick(&mut world, &mut event_q);
+		assert!(world.fetch_item_at_random(0, 0).is_none());
+	}
+
+	fn make_metal_item_test(item: ItemTypeCode)
+	{
+		let mut event_q = EventList::new();
+		let mut world = WorldState::new();
+		let mut mobile = Mobile::new_character(&"Jim".to_string());
+		let id = mobile.get_id();
+		mobile.metalwork = 100;
+		mobile.add_item(Item::metal_ingot(),false);
+		let mut event = MakeItemEvent { maker: id, item: item };
+		world.add_mobile(mobile, 0, 0);
+		event.tick(&mut world, &mut event_q);
+		assert!(world.fetch_item_at_random(0, 0).unwrap().type_code == item);
+		mobile = world.fetch_mobile(id).unwrap();
+		assert!(mobile.fetch_first_item().is_none());
+	}
+
+	#[test]
+	fn make_metal_test()
+	{
+		make_metal_item_test(ItemTypeCode::Sword);
+		make_metal_item_test(ItemTypeCode::Axe);
+		make_metal_item_test(ItemTypeCode::ChainArmor);
+		make_metal_item_test(ItemTypeCode::Pick);
+	}
+
 }
